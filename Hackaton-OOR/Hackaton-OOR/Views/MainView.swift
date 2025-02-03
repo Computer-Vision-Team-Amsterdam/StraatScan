@@ -2,62 +2,6 @@ import SwiftUI
 import CoreLocation
 import Network
 
-//class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
-//    private let locationManager = CLLocationManager()
-//    
-//    @Published var gpsAvailable: Bool = false
-//    @Published var gpsAccuracy: Double = 0.0
-//    
-//    override init() {
-//        super.init()
-//        locationManager.delegate = self
-//        locationManager.desiredAccuracy = kCLLocationAccuracyBest
-//        locationManager.requestWhenInUseAuthorization()
-//        locationManager.startUpdatingLocation()
-//    }
-//    
-//    // Update gpsAvailable when authorization status changes.
-//    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-//        if status == .authorizedWhenInUse || status == .authorizedAlways {
-//            gpsAvailable = true
-//        } else {
-//            gpsAvailable = false
-//        }
-//    }
-//    
-//    // Update accuracy and confirm availability.
-//    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-//        if let location = locations.last {
-//            gpsAccuracy = location.horizontalAccuracy
-//            gpsAvailable = true
-//        }
-//    }
-//    
-//    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-//        gpsAvailable = false
-//    }
-//}
-
-class NetworkMonitor: ObservableObject {
-    private let monitor = NWPathMonitor()
-    private let queue = DispatchQueue(label: "NetworkMonitor")
-    
-    @Published var internetAvailable: Bool = false
-    
-    init() {
-        monitor.pathUpdateHandler = { path in
-            DispatchQueue.main.async {
-                self.internetAvailable = (path.status == .satisfied)
-            }
-        }
-        monitor.start(queue: queue)
-    }
-    
-    deinit {
-        monitor.cancel()
-    }
-}
-
 func getAvailableDiskSpace() -> Int {
     let fileURL = URL(fileURLWithPath: NSHomeDirectory())
     do {
@@ -195,8 +139,9 @@ struct MainView: View {
                             Text("Stop")
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(Color.gray.opacity(0.2))
+                                .background(Color.red.opacity(0.8))
                                 .cornerRadius(10)
+                                .accentColor(.white)
                         }
                         .disabled(true)
                         
@@ -206,8 +151,9 @@ struct MainView: View {
                             Text("Detect")
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(Color.gray.opacity(0.2))
+                                .background(Color.green.opacity(0.9))
                                 .cornerRadius(10)
+                                .accentColor(.white)
                         }
                         // Enable the Detect button only if GPS is available
                         .disabled(!locationManager.gpsAvailable)
