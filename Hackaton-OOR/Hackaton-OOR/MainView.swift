@@ -2,42 +2,41 @@ import SwiftUI
 import CoreLocation
 import Network
 
-class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
-    private let locationManager = CLLocationManager()
-    
-    @Published var gpsAvailable: Bool = false
-    @Published var gpsAccuracy: Double = 0.0
-    
-    override init() {
-        super.init()
-        locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyBest
-        // Request permission. For production, ensure your Info.plist has the proper keys.
-        locationManager.requestWhenInUseAuthorization()
-        locationManager.startUpdatingLocation()
-    }
-    
-    // Update gpsAvailable when authorization status changes.
-    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
-        if status == .authorizedWhenInUse || status == .authorizedAlways {
-            gpsAvailable = true
-        } else {
-            gpsAvailable = false
-        }
-    }
-    
-    // Update accuracy and confirm availability.
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        if let location = locations.last {
-            gpsAccuracy = location.horizontalAccuracy
-            gpsAvailable = true
-        }
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        gpsAvailable = false
-    }
-}
+//class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+//    private let locationManager = CLLocationManager()
+//    
+//    @Published var gpsAvailable: Bool = false
+//    @Published var gpsAccuracy: Double = 0.0
+//    
+//    override init() {
+//        super.init()
+//        locationManager.delegate = self
+//        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+//        locationManager.requestWhenInUseAuthorization()
+//        locationManager.startUpdatingLocation()
+//    }
+//    
+//    // Update gpsAvailable when authorization status changes.
+//    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+//        if status == .authorizedWhenInUse || status == .authorizedAlways {
+//            gpsAvailable = true
+//        } else {
+//            gpsAvailable = false
+//        }
+//    }
+//    
+//    // Update accuracy and confirm availability.
+//    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+//        if let location = locations.last {
+//            gpsAccuracy = location.horizontalAccuracy
+//            gpsAvailable = true
+//        }
+//    }
+//    
+//    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+//        gpsAvailable = false
+//    }
+//}
 
 class NetworkMonitor: ObservableObject {
     private let monitor = NWPathMonitor()
@@ -107,8 +106,11 @@ struct MainView: View {
             HStack {
                 Text("GPS accuracy (m)")
                 Spacer()
-                Text(locationManager.gpsAvailable ? String(format: "%.2f", locationManager.gpsAccuracy) : "N/A")
-                    .foregroundColor(locationManager.gpsAvailable ? .green : .red)
+                if let accuracy = locationManager.lastAccuracy {
+                    Text(String(format: "%.2f", accuracy)).foregroundColor(.green)
+                } else {
+                    Text("N/A").foregroundColor(.red)
+                }
             }
             
             Divider()

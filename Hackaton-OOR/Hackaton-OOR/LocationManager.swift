@@ -10,30 +10,32 @@ import CoreLocation
 
 final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObject {
     
+    @Published var gpsAvailable: Bool = false
     @Published var lastKnownLocation: CLLocationCoordinate2D?
     @Published var lastAccuracy: CLLocationAccuracy?
     @Published var lastHeading: CLLocationDirection?
-    var manager = CLLocationManager()
+    private var locationManager = CLLocationManager()
     
-    
-    func checkLocationAuthorization() {
+    override init() {
+        super.init()
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        locationManager.requestWhenInUseAuthorization()
+        locationManager.startUpdatingLocation()
         
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        manager.startUpdatingLocation()
-        
-        // Check if heading data is available.
         if CLLocationManager.headingAvailable() {
-            manager.startUpdatingHeading()
+            locationManager.startUpdatingHeading()
             print("Starting recording heading")
         } else {
             print("No compass available")
             // Disable compass features.
         }
-        
-        switch manager.authorizationStatus {
+    }
+    
+    func checkLocationAuthorization() {
+        switch locationManager.authorizationStatus {
         case .notDetermined://The user did not choose allow or deny your app to get the location yet
-            manager.requestWhenInUseAuthorization()
+            locationManager.requestWhenInUseAuthorization()
             
         case .restricted://The user cannot change this app’s status, possibly due to active restrictions such as parental controls being in place.
             print("Location restricted")
@@ -46,7 +48,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
             
         case .authorizedWhenInUse://This authorization allows you to use all location services and receive location events only when your app is in use
             print("Location authorized when in use")
-            lastKnownLocation = manager.location?.coordinate
+            lastKnownLocation = locationManager.location?.coordinate
             
         @unknown default:
             print("Location service disabled")
@@ -63,5 +65,18 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         lastAccuracy = locations.first?.horizontalAccuracy
         lastHeading = locations.first?.course
         print(locations)
+    }
+    
+    // Update gpsAvailable when authorization status changes.
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        if status == .authorizedWhenInUse || status == .authorizedAlways {
+            gpsAvailable = true
+        } else {
+            gpsAvailable = false
+        }
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        gpsAvailable = false
     }
 }
