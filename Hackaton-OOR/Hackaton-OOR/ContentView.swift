@@ -39,8 +39,8 @@ struct ContentView: View {
             }
             
             
-            Button("Get location") {
-                locationManager.checkLocationAuthorization()
+            Button("Start GPS service") {
+                locationManager.setup()
             }
             .buttonStyle(.borderedProminent)
         }

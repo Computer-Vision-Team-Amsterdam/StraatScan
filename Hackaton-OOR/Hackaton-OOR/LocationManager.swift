@@ -15,22 +15,31 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     @Published var lastHeading: CLLocationDirection?
     var manager = CLLocationManager()
     
-    
-    func checkLocationAuthorization() {
-        
+    func setup() {
         manager.delegate = self
+        
+        checkLocationAuthorization()
+        
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        manager.activityType = CLActivityType.otherNavigation
         manager.startUpdatingLocation()
         
         // Check if heading data is available.
         if CLLocationManager.headingAvailable() {
             manager.startUpdatingHeading()
-            print("Starting recording heading")
         } else {
             print("No compass available")
             // Disable compass features.
         }
-        
+    }
+    
+    func update(_ location: CLLocation?) {
+        lastKnownLocation = location?.coordinate
+        lastAccuracy = location?.horizontalAccuracy
+        lastHeading = location?.course
+    }
+    
+    func checkLocationAuthorization() {
         switch manager.authorizationStatus {
         case .notDetermined://The user did not choose allow or deny your app to get the location yet
             manager.requestWhenInUseAuthorization()
@@ -46,8 +55,8 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
             
         case .authorizedWhenInUse://This authorization allows you to use all location services and receive location events only when your app is in use
             print("Location authorized when in use")
-            lastKnownLocation = manager.location?.coordinate
-            
+            update(manager.location)
+
         @unknown default:
             print("Location service disabled")
         
@@ -59,9 +68,6 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     }
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        lastKnownLocation = locations.first?.coordinate
-        lastAccuracy = locations.first?.horizontalAccuracy
-        lastHeading = locations.first?.course
-        print(locations)
+        update(locations.first)
     }
 }
