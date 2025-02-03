@@ -9,9 +9,13 @@ import SwiftUI
 
 @main
 struct Hackaton_OORApp: App {
+    init() {
+        UserDefaults.standard.register(defaults: ["detectContainers": true])
+    }
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainView()
         }
     }
 }
