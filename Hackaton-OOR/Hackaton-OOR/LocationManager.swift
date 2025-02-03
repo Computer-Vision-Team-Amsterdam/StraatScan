@@ -13,6 +13,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     @Published var lastKnownLocation: CLLocationCoordinate2D?
     @Published var lastAccuracy: CLLocationAccuracy?
     @Published var lastHeading: CLLocationDirection?
+    @Published var lastTimestamp: TimeInterval?
     var manager = CLLocationManager()
     
     func setup() {
@@ -37,6 +38,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         lastKnownLocation = location?.coordinate
         lastAccuracy = location?.horizontalAccuracy
         lastHeading = location?.course
+        lastTimestamp = location?.timestamp.timeIntervalSince1970
     }
     
     func checkLocationAuthorization() {
