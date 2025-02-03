@@ -148,25 +148,16 @@ struct MainView: View {
                     HStack(spacing: 20) {
                         Button(action: {}) {
                             Text("Stop")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.red.opacity(0.8))
-                                .cornerRadius(10)
-                                .accentColor(.white)
                         }
+                        .buttonStyle(StopButtonStyle())
                         .disabled(true)
                         
                         Button(action: {
                             // Implement detect action
                         }) {
                             Text("Detect")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.green.opacity(0.9))
-                                .cornerRadius(10)
-                                .accentColor(.white)
                         }
-                        // Enable the Detect button only if GPS is available
+                        .buttonStyle(DetectButtonStyle())
                         .disabled(!locationManager.gpsAvailable)
                     }
                     .frame(maxWidth: .infinity)
@@ -186,6 +177,36 @@ struct MainView: View {
             detectContainers = UserDefaults.standard.bool(forKey: "detectContainers")
             print("detectContainers updated: \(detectContainers)")
         }
+    }
+}
+
+struct DetectButtonStyle : ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(isEnabled
+                        ? (configuration.isPressed ? Color.green.opacity(0.7) : Color.green.opacity(0.9))
+                        : Color.gray)
+            .foregroundColor(.white)
+            .cornerRadius(10)
+    }
+}
+
+struct StopButtonStyle : ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding()
+            .frame(maxWidth: .infinity)
+            .background(isEnabled
+                        ? (configuration.isPressed ? Color.red.opacity(0.7) : Color.red.opacity(0.9))
+                        : Color.gray)
+            .foregroundColor(.white)
+            .cornerRadius(10)
     }
 }
 
