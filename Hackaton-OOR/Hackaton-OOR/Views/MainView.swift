@@ -27,16 +27,41 @@ struct MainView: View {
     @State private var totalImages: Int = 0
     @State private var objectsDetected: Int = 0
     
+    // Detection-related states
+    @State private var isDetecting: Bool = false
+    @State private var imagesDelivered: Double = 0
+    @State private var imagesToDeliver: Double = 10 // for simulation; replace with your actual value
+    @State private var uploadInProgress: Bool = false
+    @State private var showingStopConfirmation = false
+    
     // Timer to update storage every 30 seconds.
     let storageTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+    let detectionTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect() // simulate progress every 1 sec
 
-    
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            // Placeholder for future progress component
-            Rectangle()
-                .frame(height: 50)
-                .foregroundColor(.clear)
+            if isDetecting {
+                HStack {
+                    Spacer()
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                            .scaleEffect(2.0) // Increase the size of the circular indicator.
+                        Text("Detecting...")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.blue)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                    Spacer()
+                }
+            } else {
+                // Placeholder to maintain layout when not detecting.
+                Rectangle()
+                    .frame(height: 90)
+                    .foregroundColor(.clear)
+            }
             
             // GPS Status
             HStack {
@@ -127,7 +152,7 @@ struct MainView: View {
                     HStack {
                         Text("Images delivered")
                         Spacer()
-                        ProgressView(value: 1.0)
+                        ProgressView(value: imagesDelivered, total: imagesToDeliver)
                             .progressViewStyle(LinearProgressViewStyle(tint: .green))
                             .frame(width: 100)
                     }
@@ -136,29 +161,45 @@ struct MainView: View {
                     
                     // Images Sent to Azure
                     HStack {
-                        Text("All images sent to Azure")
+                        Text(uploadInProgress ? "Upload in progress..." : "All images sent to Azure")
                         Spacer()
-                        Text("No connection")
-                            .foregroundColor(.red)
+                        if uploadInProgress {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                        }
                     }
                     
                     Divider()
                                         
                     // Buttons
                     HStack(spacing: 20) {
-                        Button(action: {}) {
+                        Button(action: {
+                            showingStopConfirmation = true
+                        }) {
                             Text("Stop")
                         }
                         .buttonStyle(StopButtonStyle())
-                        .disabled(true)
+                        .disabled(!isDetecting)
+                        .alert("Confirm Stop", isPresented: $showingStopConfirmation) {
+                            Button("Stop", role: .destructive) {
+                                isDetecting = false
+                                uploadInProgress = false
+                                imagesDelivered = 0
+                            }
+                            Button("Cancel", role: .cancel) { }
+                        } message: {
+                            Text("Are you sure you want to stop? This will interrupt detection.")
+                        }
                         
                         Button(action: {
-                            // Implement detect action
+                            isDetecting = true
+                            uploadInProgress = true
+                            imagesDelivered = 0
                         }) {
                             Text("Detect")
                         }
                         .buttonStyle(DetectButtonStyle())
-                        .disabled(!locationManager.gpsAvailable)
+                        .disabled(isDetecting || !locationManager.gpsAvailable)
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -172,6 +213,13 @@ struct MainView: View {
         }
         .onReceive(storageTimer) { _ in
             storageAvailable = getAvailableDiskSpace()
+        }
+        .onReceive(detectionTimer) { _ in
+            if isDetecting {
+                if imagesDelivered < imagesToDeliver {
+                    imagesDelivered += 1
+                }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             detectContainers = UserDefaults.standard.bool(forKey: "detectContainers")
