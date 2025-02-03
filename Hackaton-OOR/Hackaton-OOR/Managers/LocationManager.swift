@@ -27,10 +27,8 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         
         if CLLocationManager.headingAvailable() {
             locationManager.startUpdatingHeading()
-            print("Starting recording heading")
         } else {
             print("No compass available")
-            // Disable compass features.
         }
     }
     
@@ -40,10 +38,6 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         lastHeading = location?.course
         lastTimestamp = location?.timestamp.timeIntervalSince1970
         gpsAvailable = true
-        
-        print("Update:")
-        print("Coordinate: \(String(describing: lastKnownLocation))")
-        print("Accuracy: \(String(describing: lastAccuracy))")
     }
     
     func checkLocationAuthorization() {
@@ -71,7 +65,6 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         if let latestLocation = locations.last {
-            print("Received location: \(latestLocation.coordinate.latitude), \(latestLocation.coordinate.longitude)")
             update(latestLocation)
         }
     }

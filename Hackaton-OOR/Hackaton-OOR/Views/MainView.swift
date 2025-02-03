@@ -20,6 +20,7 @@ struct MainView: View {
     @StateObject private var locationManager = LocationManager()
     @StateObject private var networkMonitor = NetworkMonitor()
     @State private var storageAvailable: Int = 0
+    @State private var detectContainers: Bool = UserDefaults.standard.bool(forKey: "detectContainers")
     
     // States for bottom section (static/recording info)
     @State private var recordedHours: String = "0:00"
@@ -28,6 +29,7 @@ struct MainView: View {
     
     // Timer to update storage every 30 seconds.
     let storageTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+
     
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -82,6 +84,15 @@ struct MainView: View {
             
             ZStack(alignment: .bottom){
                 VStack(alignment: .leading, spacing: 20) {
+                    HStack {
+                        Text("Detect containers")
+                        Spacer()
+                        Text(detectContainers ? "ON" : "OFF")
+                            .foregroundColor(detectContainers ? .green : .red)
+                    }
+                    
+                    Divider()
+                    
                     // Recorded Hours
                     HStack {
                         Text("Recorded hours")
@@ -170,6 +181,10 @@ struct MainView: View {
         }
         .onReceive(storageTimer) { _ in
             storageAvailable = getAvailableDiskSpace()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            detectContainers = UserDefaults.standard.bool(forKey: "detectContainers")
+            print("detectContainers updated: \(detectContainers)")
         }
     }
 }
