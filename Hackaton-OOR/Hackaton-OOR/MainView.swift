@@ -220,6 +220,7 @@ struct MainView: View {
         .onAppear {
             // Update storage available when the view appears.
             storageAvailable = getAvailableDiskSpace()
+            
         }
         .onReceive(storageTimer) { _ in
             storageAvailable = getAvailableDiskSpace()

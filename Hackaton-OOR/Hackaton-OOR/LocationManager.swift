@@ -23,7 +23,6 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         checkLocationAuthorization()
         locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         locationManager.activityType = CLActivityType.otherNavigation
-        locationManager.requestWhenInUseAuthorization()
         locationManager.startUpdatingLocation()
         
         if CLLocationManager.headingAvailable() {
@@ -40,6 +39,11 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         lastAccuracy = location?.horizontalAccuracy
         lastHeading = location?.course
         lastTimestamp = location?.timestamp.timeIntervalSince1970
+        gpsAvailable = true
+        
+        print("Update:")
+        print("Coordinate: \(String(describing: lastKnownLocation))")
+        print("Accuracy: \(String(describing: lastAccuracy))")
     }
     
     func checkLocationAuthorization() {
@@ -58,7 +62,6 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
             
         case .authorizedWhenInUse://This authorization allows you to use all location services and receive location events only when your app is in use
             print("Location authorized when in use")
-            update(locationManager.location)
 
         @unknown default:
             print("Location service disabled")
@@ -67,7 +70,10 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     }
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        update(locations.first)
+        if let latestLocation = locations.last {
+            print("Received location: \(latestLocation.coordinate.latitude), \(latestLocation.coordinate.longitude)")
+            update(latestLocation)
+        }
     }
     
     // Update gpsAvailable when authorization status changes.
@@ -82,5 +88,6 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         gpsAvailable = false
+        lastAccuracy = nil
     }
 }

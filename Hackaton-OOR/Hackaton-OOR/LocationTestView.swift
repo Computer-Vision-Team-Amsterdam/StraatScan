@@ -8,7 +8,7 @@
 import Foundation
 import SwiftUI
 
-struct ContentView: View {
+struct LocationTestView: View {
     @StateObject private var locationManager = LocationManager()
     
     var body: some View {
@@ -43,17 +43,11 @@ struct ContentView: View {
             } else {
                 Text("Unknown Time")
             }
-            
-            
-            Button("Start GPS service") {
-                locationManager.setup()
-            }
-            .buttonStyle(.borderedProminent)
         }
         .padding()
     }
 }
 
 #Preview {
-    ContentView()
+    LocationTestView()
 }
