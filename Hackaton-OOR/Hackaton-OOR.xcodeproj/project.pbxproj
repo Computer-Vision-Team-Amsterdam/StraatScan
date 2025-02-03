@@ -29,22 +29,9 @@
 		4FF468FB2D4CDFAF001733D8 /* Hackaton-OORUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hackaton-OORUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		4F5749362D50E97E00915CE0 /* Exceptions for "Hackaton-OOR" folder in "Hackaton-OOR" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 4FF468E02D4CDFAC001733D8 /* Hackaton-OOR */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4FF468E32D4CDFAC001733D8 /* Hackaton-OOR */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				4F5749362D50E97E00915CE0 /* Exceptions for "Hackaton-OOR" folder in "Hackaton-OOR" target */,
-			);
 			path = "Hackaton-OOR";
 			sourceTree = "<group>";
 		};
