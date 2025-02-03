@@ -35,7 +35,6 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         }
     }
     
-
     func update(_ location: CLLocation?) {
         lastKnownLocation = location?.coordinate
         lastAccuracy = location?.horizontalAccuracy
@@ -67,16 +66,13 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         }
     }
     
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {//Trigged every time authorization status changes
-        checkLocationAuthorization()
-    }
-    
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         update(locations.first)
     }
     
     // Update gpsAvailable when authorization status changes.
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        checkLocationAuthorization()
         if status == .authorizedWhenInUse || status == .authorizedAlways {
             gpsAvailable = true
         } else {
