@@ -38,9 +38,15 @@ struct ContentView: View {
                 Text("Unknown Heading")
             }
             
+            if let timestamp = locationManager.lastTimestamp {
+                Text("Timestamp: \(timestamp)")
+            } else {
+                Text("Unknown Time")
+            }
             
-            Button("Get location") {
-                locationManager.checkLocationAuthorization()
+            
+            Button("Start GPS service") {
+                locationManager.setup()
             }
             .buttonStyle(.borderedProminent)
         }

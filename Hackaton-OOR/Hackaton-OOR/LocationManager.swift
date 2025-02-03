@@ -14,12 +14,15 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     @Published var lastKnownLocation: CLLocationCoordinate2D?
     @Published var lastAccuracy: CLLocationAccuracy?
     @Published var lastHeading: CLLocationDirection?
+    @Published var lastTimestamp: TimeInterval?
     private var locationManager = CLLocationManager()
     
     override init() {
         super.init()
         locationManager.delegate = self
+        checkLocationAuthorization()
         locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        locationManager.activityType = CLActivityType.otherNavigation
         locationManager.requestWhenInUseAuthorization()
         locationManager.startUpdatingLocation()
         
@@ -30,6 +33,14 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
             print("No compass available")
             // Disable compass features.
         }
+    }
+    
+
+    func update(_ location: CLLocation?) {
+        lastKnownLocation = location?.coordinate
+        lastAccuracy = location?.horizontalAccuracy
+        lastHeading = location?.course
+        lastTimestamp = location?.timestamp.timeIntervalSince1970
     }
     
     func checkLocationAuthorization() {
@@ -48,8 +59,8 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
             
         case .authorizedWhenInUse://This authorization allows you to use all location services and receive location events only when your app is in use
             print("Location authorized when in use")
-            lastKnownLocation = locationManager.location?.coordinate
-            
+            update(locationManager.location)
+
         @unknown default:
             print("Location service disabled")
         
@@ -61,10 +72,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     }
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        lastKnownLocation = locations.first?.coordinate
-        lastAccuracy = locations.first?.horizontalAccuracy
-        lastHeading = locations.first?.course
-        print(locations)
+        update(locations.first)
     }
     
     // Update gpsAvailable when authorization status changes.
