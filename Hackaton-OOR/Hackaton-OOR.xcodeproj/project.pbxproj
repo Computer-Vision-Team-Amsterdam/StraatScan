@@ -32,16 +32,22 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4FF468E32D4CDFAC001733D8 /* Hackaton-OOR */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "Hackaton-OOR";
 			sourceTree = "<group>";
 		};
 		4FF468F42D4CDFAF001733D8 /* Hackaton-OORTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "Hackaton-OORTests";
 			sourceTree = "<group>";
 		};
 		4FF468FE2D4CDFAF001733D8 /* Hackaton-OORUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "Hackaton-OORUITests";
 			sourceTree = "<group>";
 		};
@@ -88,7 +94,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 4FF469052D4CDFAF001733D8 /* Build configuration list for PBXNativeTarget "Hackaton-OOR" */;
 			buildPhases = (
-				8534B5691A2B4DBF029AEEB7 /* [CP] Check Pods Manifest.lock */,
 				4FF468DD2D4CDFAC001733D8 /* Sources */,
 				4FF468DE2D4CDFAC001733D8 /* Frameworks */,
 				4FF468DF2D4CDFAC001733D8 /* Resources */,
@@ -214,31 +219,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		8534B5691A2B4DBF029AEEB7 /* [CP] Check Pods Manifest.lock */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
-				"${PODS_ROOT}/Manifest.lock",
-			);
-			name = "[CP] Check Pods Manifest.lock";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-Hackaton-OOR-checkManifestLockResult.txt",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4FF468DD2D4CDFAC001733D8 /* Sources */ = {
