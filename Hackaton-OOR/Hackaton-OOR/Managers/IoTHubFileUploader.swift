@@ -24,7 +24,7 @@ class AzureIoTDataUploader {
     private let host: String         // e.g., "your-iothub.azure-devices.net"
     private let deviceId: String     // e.g., "iPad"
     private let sasToken: String     // Your Shared Access Signature for the device
-    private let apiVersion: String = "2018-06-30"
+    private let apiVersion: String = "2021-04-12"
     
     init(host: String, deviceId: String, sasToken: String) {
         self.host = host
