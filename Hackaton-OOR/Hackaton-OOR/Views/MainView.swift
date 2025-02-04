@@ -195,6 +195,41 @@ struct MainView: View {
                             isDetecting = true
                             uploadInProgress = true
                             imagesDelivered = 0
+                            
+                            let resourceURI = "iothub-oor-ont-weu-itr-01.azure-devices.net/devices/iPad"
+                            let fileData = "Hello!!".data(using: .utf8)
+                            let fileName = "hello.txt"
+                            let containerName = "landingzone"
+                            
+//                            let sasToken = generateSasToken(resourceUri: resourceURI, key: "KEY", expiryInSeconds: 3600)
+//                            print("SAS Token: \(sasToken ?? "No token available")")
+                            let sasToken = "TOKEN"
+                            
+                            //NOTE: see https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-devguide-file-upload
+                            createFileUploadSASURI(token: sasToken, resourceURI: resourceURI, fileName: fileName) { result in
+                                switch result {
+                                case .success(let jsonResponse):
+                                    // Handle the JSON response
+                                    print("JSON Response: \(jsonResponse)")
+                                    let correlationId = jsonResponse["correlationId"]
+                                    let sasURI = "https://\(jsonResponse["hostname"])/\(jsonResponse["containerName"])/\(jsonResponse["blobName"])\(jsonResponse["sasToken"])"
+                                    print(sasURI)
+                                    
+                                    //TODO: not tested yet
+                                    uploadFileToAzureBlob(fileData: fileData!, sasURI: sasURI) { success, error in
+                                        if success {
+                                            print("File uploaded successfully")
+                                            //TODO: notify upload status
+                                        } else {
+                                            print("Failed to upload file: \(error?.localizedDescription ?? "Unknown error")")
+                                        }
+                                    }
+                                case .failure(let error):
+                                    // Handle the error
+                                    print("Error: \(error.localizedDescription)")
+                                }
+                            }
+                            
                         }) {
                             Text("Detect")
                         }
