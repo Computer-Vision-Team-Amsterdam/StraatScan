@@ -221,6 +221,14 @@ struct MainView: View {
                 }
             }
         }
+        // **Integrate detection start/stop with the isDetecting state:**
+        .onChange(of: isDetecting) { newValue in
+            if newValue {
+                DetectionManager.shared.startDetection()
+            } else {
+                DetectionManager.shared.stopDetection()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             detectContainers = UserDefaults.standard.bool(forKey: "detectContainers")
             print("detectContainers updated: \(detectContainers)")

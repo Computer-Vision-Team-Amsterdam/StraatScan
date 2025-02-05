@@ -15,7 +15,7 @@ struct Hackaton_OORApp: App {
     
     var body: some Scene {
         WindowGroup {
-            CameraView()
+            MainView()
         }
     }
 }
