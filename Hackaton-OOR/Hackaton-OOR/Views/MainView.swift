@@ -186,6 +186,7 @@ struct MainView: View {
                                 isDetecting = false
                                 uploadInProgress = false
                                 imagesDelivered = 0
+                                DetectionManager.shared.stopDetection()
                             }
                             Button("Cancel", role: .cancel) { }
                         } message: {
@@ -193,7 +194,7 @@ struct MainView: View {
                         }
                         
                         Button(action: {
-                            //                            isDetecting = true
+                            isDetecting = true
                             //                            uploadInProgress = true
                             //                            imagesDelivered = 0
                             // Your IoT Hub details
@@ -220,6 +221,8 @@ struct MainView: View {
                                 }
                             }
                             count_uploads += 1
+                            
+                            DetectionManager.shared.startDetection()
                         }) {
                             Text("Detect")
                         }

@@ -24,30 +24,24 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		4FF468E12D4CDFAC001733D8 /* Hackaton-OOR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = "Hackaton-OOR.app"; path = "/Users/sdavrieux/Gemeente/Hackaton-OOR/Hackaton-OOR/build/Debug-iphoneos/Hackaton-OOR.app"; sourceTree = "<absolute>"; };
-		4FF468F12D4CDFAF001733D8 /* Hackaton-OORTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = "Hackaton-OORTests.xctest"; path = "/Users/sdavrieux/Gemeente/Hackaton-OOR/Hackaton-OOR/build/Debug-iphoneos/Hackaton-OOR.app/PlugIns/Hackaton-OORTests.xctest"; sourceTree = "<absolute>"; };
-		4FF468FB2D4CDFAF001733D8 /* Hackaton-OORUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = "Hackaton-OORUITests.xctest"; path = "/Users/sdavrieux/Gemeente/Hackaton-OOR/Hackaton-OOR/build/Debug-iphoneos/Hackaton-OORUITests-Runner.app/PlugIns/Hackaton-OORUITests.xctest"; sourceTree = "<absolute>"; };
+		4FF468E12D4CDFAC001733D8 /* Hackaton-OOR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Hackaton-OOR.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		4FF468F12D4CDFAF001733D8 /* Hackaton-OORTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hackaton-OORTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		4FF468FB2D4CDFAF001733D8 /* Hackaton-OORUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hackaton-OORUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4FF468E32D4CDFAC001733D8 /* Hackaton-OOR */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "Hackaton-OOR";
 			sourceTree = "<group>";
 		};
 		4FF468F42D4CDFAF001733D8 /* Hackaton-OORTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "Hackaton-OORTests";
 			sourceTree = "<group>";
 		};
 		4FF468FE2D4CDFAF001733D8 /* Hackaton-OORUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "Hackaton-OORUITests";
 			sourceTree = "<group>";
 		};
@@ -84,7 +78,18 @@
 				4FF468E32D4CDFAC001733D8 /* Hackaton-OOR */,
 				4FF468F42D4CDFAF001733D8 /* Hackaton-OORTests */,
 				4FF468FE2D4CDFAF001733D8 /* Hackaton-OORUITests */,
+				4FF468E22D4CDFAC001733D8 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		4FF468E22D4CDFAC001733D8 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				4FF468E12D4CDFAC001733D8 /* Hackaton-OOR.app */,
+				4FF468F12D4CDFAF001733D8 /* Hackaton-OORTests.xctest */,
+				4FF468FB2D4CDFAF001733D8 /* Hackaton-OORUITests.xctest */,
+			);
+			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -106,6 +111,8 @@
 				4FF468E32D4CDFAC001733D8 /* Hackaton-OOR */,
 			);
 			name = "Hackaton-OOR";
+			packageProductDependencies = (
+			);
 			productName = "Hackaton-OOR";
 			productReference = 4FF468E12D4CDFAC001733D8 /* Hackaton-OOR.app */;
 			productType = "com.apple.product-type.application";
@@ -127,6 +134,8 @@
 				4FF468F42D4CDFAF001733D8 /* Hackaton-OORTests */,
 			);
 			name = "Hackaton-OORTests";
+			packageProductDependencies = (
+			);
 			productName = "Hackaton-OORTests";
 			productReference = 4FF468F12D4CDFAF001733D8 /* Hackaton-OORTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -148,6 +157,8 @@
 				4FF468FE2D4CDFAF001733D8 /* Hackaton-OORUITests */,
 			);
 			name = "Hackaton-OORUITests";
+			packageProductDependencies = (
+			);
 			productName = "Hackaton-OORUITests";
 			productReference = 4FF468FB2D4CDFAF001733D8 /* Hackaton-OORUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -185,7 +196,7 @@
 			mainGroup = 4FF468D82D4CDFAC001733D8;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 4FF468D82D4CDFAC001733D8;
+			productRefGroup = 4FF468E22D4CDFAC001733D8 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
