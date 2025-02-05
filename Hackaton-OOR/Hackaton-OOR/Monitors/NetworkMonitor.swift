@@ -1,9 +1,3 @@
-//
-//  NetworkMonitor.swift
-//  Hackaton-OOR
-//
-//  Created by Sebastian Davrieux on 03/02/2025.
-//
 import CoreLocation
 import Network
 

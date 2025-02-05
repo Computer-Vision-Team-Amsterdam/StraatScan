@@ -1,10 +1,3 @@
-//
-//  CameraView.swift
-//  Hackaton-OOR
-//
-//  Created by [Your Name] on [Date].
-//
-
 import SwiftUI
 import AVFoundation
 
