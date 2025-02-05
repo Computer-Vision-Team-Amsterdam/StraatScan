@@ -34,6 +34,7 @@ struct MainView: View {
     @State private var uploadInProgress: Bool = false
     @State private var showingStopConfirmation = false
     
+    @State private var count_uploads = 0
     // Timer to update storage every 30 seconds.
     let storageTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
     let detectionTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect() // simulate progress every 1 sec
@@ -192,9 +193,33 @@ struct MainView: View {
                         }
                         
                         Button(action: {
-                            isDetecting = true
-                            uploadInProgress = true
-                            imagesDelivered = 0
+                            //                            isDetecting = true
+                            //                            uploadInProgress = true
+                            //                            imagesDelivered = 0
+                            // Your IoT Hub details
+                            let iotHubHost = "iothub-oor-ont-weu-itr-01.azure-devices.net"
+                            let deviceId = "test-Sebastian"
+                            let deviceSasToken = ""
+                            
+                            // Prepare your test data
+                            let fileTestContent = "Test file."
+                            guard let data = fileTestContent.data(using: .utf8) else {
+                                print("Failed to encode test data content")
+                                return
+                            }
+                            
+                            // Create an instance of the data uploader.
+                            let uploader = AzureIoTDataUploader(host: iotHubHost, deviceId: deviceId, sasToken: deviceSasToken)
+                            
+                            // Upload the data directly.
+                            uploader.uploadData(data, blobName: "test_file_\(count_uploads).txt") { error in
+                                if let error = error {
+                                    print("Data upload failed: \(error.localizedDescription)")
+                                } else {
+                                    print("Data uploaded successfully!")
+                                }
+                            }
+                            count_uploads += 1
                         }) {
                             Text("Detect")
                         }
