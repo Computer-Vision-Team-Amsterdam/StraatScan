@@ -30,7 +30,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     // Create an instance of the data uploader.
     private let iotHubHost = "iothub-oor-ont-weu-itr-01.azure-devices.net"
     private let deviceId = "test-Sebastian"
-    private let deviceSasToken = "SharedAccessSignature sr=iothub-oor-ont-weu-itr-01.azure-devices.net%2Fdevices%2Ftest-Sebastian&sig=axlBHbETVcze88JY1STs%2FnFYUai47yMQq%2BYgthwbk24%3D&se=1738771888"
+    private let deviceSasToken = ""
     
     @Published var objectsDetected = 0
     @Published var totalImages = 0
