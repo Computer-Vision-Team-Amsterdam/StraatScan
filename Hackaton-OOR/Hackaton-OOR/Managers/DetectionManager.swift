@@ -29,7 +29,10 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     
     // Create an instance of the data uploader.
     private let iotHubHost = "iothub-oor-ont-weu-itr-01.azure-devices.net"
-    private let deviceId = "test-Sebastian"
+//    private let deviceId = "test-Sebastian"
+//    private let deviceSasToken = ""
+    
+    private let deviceId = "test_niek"
     private let deviceSasToken = ""
     
     @Published var objectsDetected = 0
@@ -175,41 +178,38 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                     // Define your sensitive classes.
                     let sensitiveClasses: Set<String> = ["person", "license plate"]
                     var sensitiveBoxes = [CGRect]()
+                    var containerBoxes = [CGRect]()
                     
                     // For each observation that is sensitive, convert its normalized bounding box to image coordinates.
                     // (Assume 'image' is created from your saved pixel buffer.)
                     if let pixelBuffer = self.lastPixelBufferForSaving,
-                       let image = self.imageFromPixelBuffer(pixelBuffer: pixelBuffer) {
+                       var image = self.imageFromPixelBuffer(pixelBuffer: pixelBuffer) {
                         
                         let imageSize = image.size
                         for observation in results {
-                            if let label = observation.labels.first?.identifier.lowercased(),
-                               label == "container" {
-                                DispatchQueue.main.async {
-                                    self.objectsDetected += 1
-                                }
-                            }
-                            if let label = observation.labels.first?.identifier.lowercased(),
-                               sensitiveClasses.contains(label) {
+                            if let label = observation.labels.first?.identifier.lowercased(){
+                                print(label)
                                 let normRect = observation.boundingBox
-                                // VNImageRectForNormalizedRect converts a normalized rect (origin bottom-left)
-                                // into pixel coordinates (origin top-left) given the image width and height.
+                                print(normRect)
                                 let rectInImage = VNImageRectForNormalizedRect(normRect, Int(imageSize.width), Int(imageSize.height))
-                                sensitiveBoxes.append(rectInImage)
+                                print(rectInImage)
+                                if label == "container" {
+                                    DispatchQueue.main.async {
+                                        self.objectsDetected += 1
+                                    }
+                                    containerBoxes.append(rectInImage)
+                                } else if sensitiveClasses.contains(label) {
+                                    sensitiveBoxes.append(rectInImage)
+                                }
                             }
                         }
                         
-                        // --- Step 3: Blur the sensitive regions.
-                        if !sensitiveBoxes.isEmpty, let blurredImage = self.blurSensitiveAreas(in: image, boxes: sensitiveBoxes, blurRadius: 10) {
-                            // Save the blurred image (using your custom saveDetetction(_:) method).
-                            self.deliverDetectionToAzure(image: blurredImage, predictions: results)
-                            //                      // Optionally clear the pixel buffer so this frame isn’t saved again.
-                            //                      self.lastPixelBufferForSaving = nil
+                        if !sensitiveBoxes.isEmpty,
+                           let imageWithBlackBoxes = self.coverSensitiveAreasWithBlackBox(in: image, boxes: sensitiveBoxes) {
+                            image = imageWithBlackBoxes
                         }
-                        else {
-                            self.deliverDetectionToAzure(image: image, predictions: results)
-                        }
-                        // Optionally clear the pixel buffer so this frame isn’t saved again.
+                        image = self.drawSquaresAroundContainerAreas(in: image, boxes: containerBoxes)
+                        self.deliverDetectionToAzure(image: image, predictions: results)
                         self.lastPixelBufferForSaving = nil
                     }
                 }
@@ -390,6 +390,68 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             }
         } catch {
             print("Error retrieving detections folder: \(error)")
+        }
+    }
+    
+    func coverSensitiveAreasWithBlackBox(in image: UIImage, boxes: [CGRect]) -> UIImage? {
+        // Convert the UIImage to a CIImage.
+        guard let ciImage = CIImage(image: image) else { return nil }
+        var outputImage = ciImage
+        let context = CIContext(options: nil)
+        
+        for box in boxes {
+            // Create a black color image using CIConstantColorGenerator.
+            guard let colorFilter = CIFilter(name: "CIConstantColorGenerator") else { continue }
+            // Create a CIColor for black.
+            let blackColor = CIColor(color: .black)
+            colorFilter.setValue(blackColor, forKey: kCIInputColorKey)
+            
+            // Generate the black image and crop it to the box.
+            guard let fullBlackImage = colorFilter.outputImage?.cropped(to: box) else { continue }
+            
+            // Composite the black box over the current output image.
+            if let compositeFilter = CIFilter(name: "CISourceOverCompositing") {
+                compositeFilter.setValue(fullBlackImage, forKey: kCIInputImageKey)
+                compositeFilter.setValue(outputImage, forKey: kCIInputBackgroundImageKey)
+                if let composited = compositeFilter.outputImage {
+                    outputImage = composited
+                }
+            }
+        }
+        
+        // Render the final output image.
+        if let cgImage = context.createCGImage(outputImage, from: outputImage.extent) {
+            return UIImage(cgImage: cgImage)
+        }
+        
+        return nil
+    }
+
+    func drawSquaresAroundContainerAreas(
+        in image: UIImage,
+        boxes: [CGRect],
+        color: UIColor = .red,
+        lineWidth: CGFloat = 3.0
+    ) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: image.size)
+        return renderer.image { context in
+            // Draw the image (assumed to be drawn in the top-left origin space)
+            image.draw(at: .zero)
+            
+            context.cgContext.setStrokeColor(color.cgColor)
+            context.cgContext.setLineWidth(lineWidth)
+            
+            for box in boxes {
+                // Convert the box from Vision's coordinate system (bottom-left origin)
+                // to UIKit’s coordinate system (top-left origin)
+                let adjustedBox = CGRect(
+                    x: box.origin.x,
+                    y: image.size.height - box.origin.y - box.size.height,
+                    width: box.size.width,
+                    height: box.size.height
+                )
+                context.cgContext.stroke(adjustedBox)
+            }
         }
     }
     
