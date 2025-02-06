@@ -396,7 +396,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Hackaton-OOR/Preview Content\"";
-				DEVELOPMENT_TEAM = UJR8R3SK2N;
+				DEVELOPMENT_TEAM = W6SA8G6GG8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The app needs access to your camera to detect containers.";
@@ -427,7 +427,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Hackaton-OOR/Preview Content\"";
-				DEVELOPMENT_TEAM = UJR8R3SK2N;
+				DEVELOPMENT_TEAM = W6SA8G6GG8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The app needs access to your camera to detect containers.";
