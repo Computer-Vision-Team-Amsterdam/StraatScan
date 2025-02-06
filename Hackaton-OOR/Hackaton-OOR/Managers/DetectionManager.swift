@@ -19,9 +19,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     private var currentBuffer: CVPixelBuffer?
     private var uploader: AzureIoTDataUploader?
     
-    // You can adjust these thresholds in code (instead of via UI sliders).
-    var confidenceThreshold: Double = 0.01
-    var iouThreshold: Double = 0.45
+    // Keep track of the last known user default values
+    private var lastConfidenceThreshold: Double = 0.25
+    private var lastIoUThreshold: Double = 0.45
     
     // Track whether the video capture has finished configuration.
     private(set) var isConfigured: Bool = false
@@ -55,7 +55,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             // Replace `yolov8m` with the actual name of your generated model class.
             let loadedModel = try yolov8m(configuration: modelConfig).model
             self.mlModel = loadedModel
-            self.detector = try VNCoreMLModel(for: loadedModel)
+            let vnModel = try VNCoreMLModel(for: loadedModel)
+            vnModel.featureProvider = ThresholdManager.shared.getThresholdProvider()
+            self.detector = vnModel
         } catch {
             print("Error loading model: \(error)")
         }
@@ -95,6 +97,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             }
             return
         }
+        updateThresholdsIfNeeded()
         videoCapture?.start()
         print("Detection started.")
         detectionTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -111,6 +114,20 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         print("Detection stopped.")
         detectionTimer?.invalidate()
         detectionTimer = nil
+    }
+  
+    /// Updates Thresholds if adjusted.
+    private func updateThresholdsIfNeeded() {
+        let tempProvider = ThresholdManager.shared.getThresholdProvider()
+        let finalConf = tempProvider.confidenceThreshold
+        let finalIoU = tempProvider.iouThreshold
+        
+        if finalConf != lastConfidenceThreshold || finalIoU != lastIoUThreshold {
+            print("Updating thresholds: Confidence=\(finalConf), IoU=\(finalIoU)")
+            detector?.featureProvider = tempProvider
+            lastConfidenceThreshold = finalConf
+            lastIoUThreshold = finalIoU
+        }
     }
     
     // MARK: - VideoCaptureDelegate
@@ -183,12 +200,12 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                         // --- Step 3: Blur the sensitive regions.
                         if !sensitiveBoxes.isEmpty, let blurredImage = self.blurSensitiveAreas(in: image, boxes: sensitiveBoxes, blurRadius: 10) {
                             // Save the blurred image (using your custom saveDetetction(_:) method).
-                            self.deliverDetectionToAzure(image: blurredImage, predictions: results)
+                            self.saveDetection(image: blurredImage, predictions: results)
                             //                      // Optionally clear the pixel buffer so this frame isn’t saved again.
                             //                      self.lastPixelBufferForSaving = nil
                         }
                         else {
-                            self.deliverDetectionToAzure(image: image, predictions: results)
+                            self.saveDetection(image: image, predictions: results)
                         }
                         // Optionally clear the pixel buffer so this frame isn’t saved again.
                         self.lastPixelBufferForSaving = nil

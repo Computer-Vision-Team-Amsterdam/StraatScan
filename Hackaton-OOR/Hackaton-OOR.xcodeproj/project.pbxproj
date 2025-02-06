@@ -396,7 +396,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Hackaton-OOR/Preview Content\"";
-				DEVELOPMENT_TEAM = W6SA8G6GG8;
+				DEVELOPMENT_TEAM = UJR8R3SK2N;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The app needs access to your camera to detect containers.";
@@ -411,7 +411,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "nl.amsterdam.cvt.hackaton-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = nl.amsterdam.cvt.hackathon.detection;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -427,7 +427,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Hackaton-OOR/Preview Content\"";
-				DEVELOPMENT_TEAM = W6SA8G6GG8;
+				DEVELOPMENT_TEAM = UJR8R3SK2N;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "The app needs access to your camera to detect containers.";
@@ -442,7 +442,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "nl.amsterdam.cvt.hackaton-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = nl.amsterdam.cvt.hackathon.detection;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
