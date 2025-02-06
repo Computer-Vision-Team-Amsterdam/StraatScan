@@ -200,12 +200,12 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                         // --- Step 3: Blur the sensitive regions.
                         if !sensitiveBoxes.isEmpty, let blurredImage = self.blurSensitiveAreas(in: image, boxes: sensitiveBoxes, blurRadius: 10) {
                             // Save the blurred image (using your custom saveDetetction(_:) method).
-                            self.saveDetection(image: blurredImage, predictions: results)
+                            self.deliverDetectionToAzure(image: blurredImage, predictions: results)
                             //                      // Optionally clear the pixel buffer so this frame isn’t saved again.
                             //                      self.lastPixelBufferForSaving = nil
                         }
                         else {
-                            self.saveDetection(image: image, predictions: results)
+                            self.deliverDetectionToAzure(image: image, predictions: results)
                         }
                         // Optionally clear the pixel buffer so this frame isn’t saved again.
                         self.lastPixelBufferForSaving = nil
