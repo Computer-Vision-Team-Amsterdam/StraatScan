@@ -16,6 +16,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     private var mlModel: MLModel?
     private var detector: VNCoreMLModel?
     private var lastPixelBufferForSaving: CVPixelBuffer?
+    private var lastPixelBufferTimestamp: TimeInterval?
     private var currentBuffer: CVPixelBuffer?
     private var uploader: AzureIoTDataUploader?
     
@@ -123,6 +124,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             // Store the pixel buffer for later use (e.g., to convert to UIImage)
             currentBuffer = pixelBuffer
             self.lastPixelBufferForSaving = pixelBuffer
+            self.lastPixelBufferTimestamp = NSDate().timeIntervalSince1970
             
             // Optionally, set the image orientation based on your needs.
             // Here we use .up for simplicity.
@@ -286,7 +288,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         
         // Create the metadata dictionary.
         var metadata: [String: Any] = [
-            "timestamp": dateString,
+            "date": dateString,
             "predictions": predictionsMetadata
         ]
         if let coordinate = locationManager.lastKnownLocation {
@@ -296,12 +298,21 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             metadata["latitude"] = ""
             metadata["longitude"] = ""
         }
-        if let timestamp = locationManager.lastTimestamp {
-            metadata["timestamp"] = timestamp
+        if self.lastPixelBufferTimestamp != nil {
+            metadata["image_timestamp"] = self.lastPixelBufferTimestamp
         } else {
-            metadata["timestamp"] = ""
+            metadata["image_timestamp"] = ""
         }
-        
+        if let timestamp = locationManager.lastTimestamp {
+            metadata["gps_timestamp"] = timestamp
+        } else {
+            metadata["gps_timestamp"] = ""
+        }
+        if let gps_accuracy = locationManager.lastAccuracy {
+            metadata["gps_accuracy"] = gps_accuracy
+        } else {
+            metadata["gps_accuracy"] = ""
+        }
         // Deliver to Azure the metadata as a JSON file.
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: metadata, options: .prettyPrinted)
