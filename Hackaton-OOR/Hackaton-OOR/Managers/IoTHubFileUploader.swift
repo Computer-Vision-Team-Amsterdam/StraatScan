@@ -35,7 +35,6 @@ class AzureIoTDataUploader {
     func uploadData(_ data: Data, blobName: String, completion: @escaping (Error?) -> Void) {
         // Step 1: Request upload info from IoT Hub.
         requestFileUpload(blobName: blobName) { result in
-            print("Result \(result)")
             switch result {
             case .success(let uploadInfo):
                 // Step 2: Upload data to Blob Storage.
@@ -87,12 +86,6 @@ class AzureIoTDataUploader {
                 return
             }
             
-            if let data = data {
-                print("Received data: \(String(data: data, encoding: .utf8) ?? "non-UTF8 data"), length: \(data.count)")
-            } else {
-                print("No data received.")
-            }
-            print(response)
             guard let httpResp = response as? HTTPURLResponse,
                   (200...299).contains(httpResp.statusCode) else {
                 let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
@@ -105,12 +98,11 @@ class AzureIoTDataUploader {
             // Continue with JSON decoding…
             do {
                 let decoder = JSONDecoder()
-                print(decoder)
                 let uploadResponse = try decoder.decode(FileUploadResponse.self, from: data!)
-                print(uploadResponse)
                 completion(.success(uploadResponse))
             } catch {
                 completion(.failure(error))
+                print(error)
             }
         }.resume()
 
@@ -138,12 +130,6 @@ class AzureIoTDataUploader {
                 print("Upload task error: \(error.localizedDescription)")
                 completion(.failure(error))
                 return
-            }
-            
-            // Log the response data if any
-            if let responseData = responseData,
-               let responseString = String(data: responseData, encoding: .utf8) {
-                print("Blob upload response data: \(responseString)")
             }
             
             guard let httpResp = response as? HTTPURLResponse,

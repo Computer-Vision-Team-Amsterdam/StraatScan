@@ -19,26 +19,31 @@ func getAvailableDiskSpace() -> Int {
 struct MainView: View {
     @StateObject private var locationManager = LocationManager()
     @StateObject private var networkMonitor = NetworkMonitor()
+    @ObservedObject private var detectionManager = DetectionManager()
     @State private var storageAvailable: Int = 0
     @State private var detectContainers: Bool = UserDefaults.standard.bool(forKey: "detectContainers")
     
     // States for bottom section (static/recording info)
     @State private var recordedHours: String = "0:00"
     @State private var totalImages: Int = 0
-    @State private var objectsDetected: Int = 0
     
     // Detection-related states
     @State private var isDetecting: Bool = false
     @State private var imagesDelivered: Double = 0
     @State private var imagesToDeliver: Double = 10 // for simulation; replace with your actual value
-    @State private var uploadInProgress: Bool = false
     @State private var showingStopConfirmation = false
     
-    @State private var count_uploads = 0
-    // Timer to update storage every 30 seconds.
-    let storageTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
-    let detectionTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect() // simulate progress every 1 sec
-
+    let storageTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect()
+    let deliverToAzureTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect() // simulate progress every 1 sec
+    var formattedTime: String {
+        let totalSeconds = detectionManager.minutesRunning * 60
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute]
+        formatter.unitsStyle = .positional    // This produces "HH:mm:ss"
+        formatter.zeroFormattingBehavior = [.pad]
+        return formatter.string(from: TimeInterval(totalSeconds)) ?? "00:00"
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             if isDetecting {
@@ -123,7 +128,7 @@ struct MainView: View {
                     HStack {
                         Text("Recorded hours")
                         Spacer()
-                        Text(recordedHours)
+                        Text(formattedTime)
                             .foregroundColor(.gray)
                     }
                     
@@ -133,7 +138,7 @@ struct MainView: View {
                     HStack {
                         Text("Total images")
                         Spacer()
-                        Text("\(totalImages)")
+                        Text("\(detectionManager.totalImages)")
                             .foregroundColor(.gray)
                     }
                     
@@ -143,7 +148,7 @@ struct MainView: View {
                     HStack {
                         Text("Objects detected")
                         Spacer()
-                        Text("\(objectsDetected)")
+                        Text("\(detectionManager.objectsDetected)")
                             .foregroundColor(.gray)
                     }
                     
@@ -153,25 +158,23 @@ struct MainView: View {
                     HStack {
                         Text("Images delivered")
                         Spacer()
-                        ProgressView(value: imagesDelivered, total: imagesToDeliver)
+                        Text("\(detectionManager.imagesDelivered)")
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Divider()
+                    
+                    // Images Delivered
+                    HStack {
+                        Text("Delivery progress")
+                        Spacer()
+                        ProgressView(value: Double(detectionManager.imagesDelivered), total: Double(detectionManager.totalImages))
                             .progressViewStyle(LinearProgressViewStyle(tint: .green))
                             .frame(width: 100)
                     }
                     
                     Divider()
                     
-                    // Images Sent to Azure
-                    HStack {
-                        Text(uploadInProgress ? "Upload in progress..." : "All images sent to Azure")
-                        Spacer()
-                        if uploadInProgress {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-                        }
-                    }
-                    
-                    Divider()
-                                        
                     // Buttons
                     HStack(spacing: 20) {
                         Button(action: {
@@ -184,8 +187,7 @@ struct MainView: View {
                         .alert("Confirm Stop", isPresented: $showingStopConfirmation) {
                             Button("Stop", role: .destructive) {
                                 isDetecting = false
-                                uploadInProgress = false
-                                imagesDelivered = 0
+                                detectionManager.stopDetection()
                             }
                             Button("Cancel", role: .cancel) { }
                         } message: {
@@ -193,33 +195,8 @@ struct MainView: View {
                         }
                         
                         Button(action: {
-                            //                            isDetecting = true
-                            //                            uploadInProgress = true
-                            //                            imagesDelivered = 0
-                            // Your IoT Hub details
-                            let iotHubHost = "iothub-oor-ont-weu-itr-01.azure-devices.net"
-                            let deviceId = "test-Sebastian"
-                            let deviceSasToken = ""
-                            
-                            // Prepare your test data
-                            let fileTestContent = "Test file."
-                            guard let data = fileTestContent.data(using: .utf8) else {
-                                print("Failed to encode test data content")
-                                return
-                            }
-                            
-                            // Create an instance of the data uploader.
-                            let uploader = AzureIoTDataUploader(host: iotHubHost, deviceId: deviceId, sasToken: deviceSasToken)
-                            
-                            // Upload the data directly.
-                            uploader.uploadData(data, blobName: "test_file_\(count_uploads).txt") { error in
-                                if let error = error {
-                                    print("Data upload failed: \(error.localizedDescription)")
-                                } else {
-                                    print("Data uploaded successfully!")
-                                }
-                            }
-                            count_uploads += 1
+                            isDetecting = true
+                            detectionManager.startDetection()
                         }) {
                             Text("Detect")
                         }
@@ -232,19 +209,14 @@ struct MainView: View {
         }
         .padding()
         .onAppear {
-            // Update storage available when the view appears.
             storageAvailable = getAvailableDiskSpace()
-            
+            detectionManager.deliverFilesFromDocuments()
         }
         .onReceive(storageTimer) { _ in
             storageAvailable = getAvailableDiskSpace()
         }
-        .onReceive(detectionTimer) { _ in
-            if isDetecting {
-                if imagesDelivered < imagesToDeliver {
-                    imagesDelivered += 1
-                }
-            }
+        .onReceive(deliverToAzureTimer) { _ in
+            detectionManager.deliverFilesFromDocuments()
         }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             detectContainers = UserDefaults.standard.bool(forKey: "detectContainers")
@@ -255,7 +227,7 @@ struct MainView: View {
 
 struct DetectButtonStyle : ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
-
+    
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding()
@@ -270,7 +242,7 @@ struct DetectButtonStyle : ButtonStyle {
 
 struct StopButtonStyle : ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
-
+    
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding()

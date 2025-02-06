@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  Hackaton-OOR
-//
-//  Created by Sebastian Davrieux on 31/01/2025.
-//
-
 import Foundation
 import SwiftUI
 
