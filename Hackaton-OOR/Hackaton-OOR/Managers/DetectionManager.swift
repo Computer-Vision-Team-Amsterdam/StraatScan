@@ -16,19 +16,23 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     private var mlModel: MLModel?
     private var detector: VNCoreMLModel?
     private var lastPixelBufferForSaving: CVPixelBuffer?
+    private var lastPixelBufferTimestamp: TimeInterval?
     private var currentBuffer: CVPixelBuffer?
     private var uploader: AzureIoTDataUploader?
     
-    // You can adjust these thresholds in code (instead of via UI sliders).
-    var confidenceThreshold: Double = 0.01
-    var iouThreshold: Double = 0.45
+    // Keep track of the last known user default values
+    private var lastConfidenceThreshold: Double = 0.25
+    private var lastIoUThreshold: Double = 0.45
     
     // Track whether the video capture has finished configuration.
     private(set) var isConfigured: Bool = false
     
     // Create an instance of the data uploader.
     private let iotHubHost = "iothub-oor-ont-weu-itr-01.azure-devices.net"
-    private let deviceId = "test-Sebastian"
+//    private let deviceId = "test-Sebastian"
+//    private let deviceSasToken = ""
+    
+    private let deviceId = "test_niek"
     private let deviceSasToken = ""
     
     @Published var objectsDetected = 0
@@ -55,7 +59,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             // Replace `yolov8m` with the actual name of your generated model class.
             let loadedModel = try yolov8m(configuration: modelConfig).model
             self.mlModel = loadedModel
-            self.detector = try VNCoreMLModel(for: loadedModel)
+            let vnModel = try VNCoreMLModel(for: loadedModel)
+            vnModel.featureProvider = ThresholdManager.shared.getThresholdProvider()
+            self.detector = vnModel
         } catch {
             print("Error loading model: \(error)")
         }
@@ -95,6 +101,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             }
             return
         }
+        updateThresholdsIfNeeded()
         videoCapture?.start()
         print("Detection started.")
         detectionTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -112,6 +119,20 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         detectionTimer?.invalidate()
         detectionTimer = nil
     }
+  
+    /// Updates Thresholds if adjusted.
+    private func updateThresholdsIfNeeded() {
+        let tempProvider = ThresholdManager.shared.getThresholdProvider()
+        let finalConf = tempProvider.confidenceThreshold
+        let finalIoU = tempProvider.iouThreshold
+        
+        if finalConf != lastConfidenceThreshold || finalIoU != lastIoUThreshold {
+            print("Updating thresholds: Confidence=\(finalConf), IoU=\(finalIoU)")
+            detector?.featureProvider = tempProvider
+            lastConfidenceThreshold = finalConf
+            lastIoUThreshold = finalIoU
+        }
+    }
     
     // MARK: - VideoCaptureDelegate
     
@@ -123,6 +144,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             // Store the pixel buffer for later use (e.g., to convert to UIImage)
             currentBuffer = pixelBuffer
             self.lastPixelBufferForSaving = pixelBuffer
+            self.lastPixelBufferTimestamp = NSDate().timeIntervalSince1970
             
             // Optionally, set the image orientation based on your needs.
             // Here we use .up for simplicity.
@@ -156,41 +178,38 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                     // Define your sensitive classes.
                     let sensitiveClasses: Set<String> = ["person", "license plate"]
                     var sensitiveBoxes = [CGRect]()
+                    var containerBoxes = [CGRect]()
                     
                     // For each observation that is sensitive, convert its normalized bounding box to image coordinates.
                     // (Assume 'image' is created from your saved pixel buffer.)
                     if let pixelBuffer = self.lastPixelBufferForSaving,
-                       let image = self.imageFromPixelBuffer(pixelBuffer: pixelBuffer) {
+                       var image = self.imageFromPixelBuffer(pixelBuffer: pixelBuffer) {
                         
                         let imageSize = image.size
                         for observation in results {
-                            if let label = observation.labels.first?.identifier.lowercased(),
-                               label == "container" {
-                                DispatchQueue.main.async {
-                                    self.objectsDetected += 1
-                                }
-                            }
-                            if let label = observation.labels.first?.identifier.lowercased(),
-                               sensitiveClasses.contains(label) {
+                            if let label = observation.labels.first?.identifier.lowercased(){
+                                print(label)
                                 let normRect = observation.boundingBox
-                                // VNImageRectForNormalizedRect converts a normalized rect (origin bottom-left)
-                                // into pixel coordinates (origin top-left) given the image width and height.
+                                print(normRect)
                                 let rectInImage = VNImageRectForNormalizedRect(normRect, Int(imageSize.width), Int(imageSize.height))
-                                sensitiveBoxes.append(rectInImage)
+                                print(rectInImage)
+                                if label == "container" {
+                                    DispatchQueue.main.async {
+                                        self.objectsDetected += 1
+                                    }
+                                    containerBoxes.append(rectInImage)
+                                } else if sensitiveClasses.contains(label) {
+                                    sensitiveBoxes.append(rectInImage)
+                                }
                             }
                         }
                         
-                        // --- Step 3: Blur the sensitive regions.
-                        if !sensitiveBoxes.isEmpty, let blurredImage = self.blurSensitiveAreas(in: image, boxes: sensitiveBoxes, blurRadius: 10) {
-                            // Save the blurred image (using your custom saveDetetction(_:) method).
-                            self.deliverDetectionToAzure(image: blurredImage, predictions: results)
-                            //                      // Optionally clear the pixel buffer so this frame isn’t saved again.
-                            //                      self.lastPixelBufferForSaving = nil
+                        if !sensitiveBoxes.isEmpty,
+                           let imageWithBlackBoxes = self.coverSensitiveAreasWithBlackBox(in: image, boxes: sensitiveBoxes) {
+                            image = imageWithBlackBoxes
                         }
-                        else {
-                            self.deliverDetectionToAzure(image: image, predictions: results)
-                        }
-                        // Optionally clear the pixel buffer so this frame isn’t saved again.
+                        image = self.drawSquaresAroundContainerAreas(in: image, boxes: containerBoxes)
+                        self.deliverDetectionToAzure(image: image, predictions: results)
                         self.lastPixelBufferForSaving = nil
                     }
                 }
@@ -286,7 +305,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         
         // Create the metadata dictionary.
         var metadata: [String: Any] = [
-            "timestamp": dateString,
+            "date": dateString,
             "predictions": predictionsMetadata
         ]
         if let coordinate = locationManager.lastKnownLocation {
@@ -296,12 +315,21 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             metadata["latitude"] = ""
             metadata["longitude"] = ""
         }
-        if let timestamp = locationManager.lastTimestamp {
-            metadata["timestamp"] = timestamp
+        if self.lastPixelBufferTimestamp != nil {
+            metadata["image_timestamp"] = self.lastPixelBufferTimestamp
         } else {
-            metadata["timestamp"] = ""
+            metadata["image_timestamp"] = ""
         }
-        
+        if let timestamp = locationManager.lastTimestamp {
+            metadata["gps_timestamp"] = timestamp
+        } else {
+            metadata["gps_timestamp"] = ""
+        }
+        if let gps_accuracy = locationManager.lastAccuracy {
+            metadata["gps_accuracy"] = gps_accuracy
+        } else {
+            metadata["gps_accuracy"] = ""
+        }
         // Deliver to Azure the metadata as a JSON file.
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: metadata, options: .prettyPrinted)
@@ -365,88 +393,65 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         }
     }
     
-    func saveDetection(image: UIImage, predictions: [VNRecognizedObjectObservation]) {
-        // Generate a filename using the current date/time.
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyyMMdd_HHmmssSSS"
-        let dateString = dateFormatter.string(from: Date())
-        let fileNameBase = "detection_\(dateString)"
+    func coverSensitiveAreasWithBlackBox(in image: UIImage, boxes: [CGRect]) -> UIImage? {
+        // Convert the UIImage to a CIImage.
+        guard let ciImage = CIImage(image: image) else { return nil }
+        var outputImage = ciImage
+        let context = CIContext(options: nil)
         
-        // Locate the "Detections" folder in the app’s Documents directory.
-        guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            print("Could not locate Documents folder.")
-            return
-        }
-        let detectionsFolderURL = documentsURL.appendingPathComponent("Detections")
-        
-        print(detectionsFolderURL)
-        
-        // Ensure the "Detections" folder exists.
-        if !FileManager.default.fileExists(atPath: detectionsFolderURL.path) {
-            do {
-                try FileManager.default.createDirectory(at: detectionsFolderURL, withIntermediateDirectories: true, attributes: nil)
-                print("Created Detections folder at: \(detectionsFolderURL.path)")
-            } catch {
-                print("Error creating folder: \(error.localizedDescription)")
-                return
+        for box in boxes {
+            // Create a black color image using CIConstantColorGenerator.
+            guard let colorFilter = CIFilter(name: "CIConstantColorGenerator") else { continue }
+            // Create a CIColor for black.
+            let blackColor = CIColor(color: .black)
+            colorFilter.setValue(blackColor, forKey: kCIInputColorKey)
+            
+            // Generate the black image and crop it to the box.
+            guard let fullBlackImage = colorFilter.outputImage?.cropped(to: box) else { continue }
+            
+            // Composite the black box over the current output image.
+            if let compositeFilter = CIFilter(name: "CISourceOverCompositing") {
+                compositeFilter.setValue(fullBlackImage, forKey: kCIInputImageKey)
+                compositeFilter.setValue(outputImage, forKey: kCIInputBackgroundImageKey)
+                if let composited = compositeFilter.outputImage {
+                    outputImage = composited
+                }
             }
         }
         
-        // Save the image as a JPEG.
-        let imageURL = detectionsFolderURL.appendingPathComponent(fileNameBase + ".jpg")
-        if let imageData = image.jpegData(compressionQuality: 0.5) {
-            do {
-                try imageData.write(to: imageURL)
-                print("Saved image at \(imageURL)")
-            } catch {
-                print("Error saving image: \(error)")
+        // Render the final output image.
+        if let cgImage = context.createCGImage(outputImage, from: outputImage.extent) {
+            return UIImage(cgImage: cgImage)
+        }
+        
+        return nil
+    }
+
+    func drawSquaresAroundContainerAreas(
+        in image: UIImage,
+        boxes: [CGRect],
+        color: UIColor = .red,
+        lineWidth: CGFloat = 3.0
+    ) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: image.size)
+        return renderer.image { context in
+            // Draw the image (assumed to be drawn in the top-left origin space)
+            image.draw(at: .zero)
+            
+            context.cgContext.setStrokeColor(color.cgColor)
+            context.cgContext.setLineWidth(lineWidth)
+            
+            for box in boxes {
+                // Convert the box from Vision's coordinate system (bottom-left origin)
+                // to UIKit’s coordinate system (top-left origin)
+                let adjustedBox = CGRect(
+                    x: box.origin.x,
+                    y: image.size.height - box.origin.y - box.size.height,
+                    width: box.size.width,
+                    height: box.size.height
+                )
+                context.cgContext.stroke(adjustedBox)
             }
-        }
-        
-        // Build the metadata for each prediction.
-        var predictionsMetadata = [[String: Any]]()
-        for prediction in predictions {
-            if let bestLabel = prediction.labels.first?.identifier {
-                let meta: [String: Any] = [
-                    "label": bestLabel,
-                    "confidence": prediction.labels.first?.confidence ?? 0,
-                    "boundingBox": [
-                        "x": prediction.boundingBox.origin.x,
-                        "y": prediction.boundingBox.origin.y,
-                        "width": prediction.boundingBox.size.width,
-                        "height": prediction.boundingBox.size.height
-                    ]
-                ]
-                predictionsMetadata.append(meta)
-            }
-        }
-        
-        // Create the metadata dictionary.
-        var metadata: [String: Any] = [
-            "timestamp": dateString,
-            "predictions": predictionsMetadata
-        ]
-        if let coordinate = locationManager.lastKnownLocation {
-            metadata["latitude"] = coordinate.latitude
-            metadata["longitude"] = coordinate.longitude
-        } else {
-            metadata["latitude"] = ""
-            metadata["longitude"] = ""
-        }
-        if let timestamp = locationManager.lastTimestamp {
-            metadata["timestamp"] = timestamp
-        } else {
-            metadata["timestamp"] = ""
-        }
-        
-        // Save the metadata as a JSON file.
-        let metadataURL = detectionsFolderURL.appendingPathComponent(fileNameBase + ".json")
-        do {
-            let jsonData = try JSONSerialization.data(withJSONObject: metadata, options: .prettyPrinted)
-            try jsonData.write(to: metadataURL)
-            print("Saved metadata at \(metadataURL)")
-        } catch {
-            print("Error saving metadata: \(error)")
         }
     }
     
