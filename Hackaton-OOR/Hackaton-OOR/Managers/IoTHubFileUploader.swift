@@ -22,14 +22,14 @@ struct FileUploadNotification: Codable {
 class AzureIoTDataUploader {
     
     private let host: String         // e.g., "your-iothub.azure-devices.net"
-    private let deviceId: String     // e.g., "iPad"
-    private let sasToken: String     // Your Shared Access Signature for the device
+    private let deviceId: String?     // e.g., "iPad"
+    private let sasToken: String?     // Your Shared Access Signature for the device
     private let apiVersion: String = "2021-04-12"
     
     init(host: String, deviceId: String, sasToken: String) {
         self.host = host
-        self.deviceId = deviceId
-        self.sasToken = sasToken
+        self.deviceId = IoTDeviceManager.shared.deviceId
+        self.sasToken = IoTDeviceManager.shared.deviceSasToken
     }
     
     func uploadData(_ data: Data, blobName: String, completion: @escaping (Error?) -> Void) {
