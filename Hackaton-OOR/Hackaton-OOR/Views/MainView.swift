@@ -43,124 +43,102 @@ struct MainView: View {
         formatter.zeroFormattingBehavior = [.pad]
         return formatter.string(from: TimeInterval(totalSeconds)) ?? "00:00"
     }
+    // A helper view for a row with a label and a value.
+    private func infoRow(label: String, value: String, valueColor: Color = .gray) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value)
+                .foregroundColor(valueColor)
+        }
+    }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            if isDetecting {
-                HStack {
-                    Spacer()
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-                            .scaleEffect(2.0) // Increase the size of the circular indicator.
-                        Text("Detecting...")
-                            .font(.title3)
-                            .fontWeight(.bold)
-                            .foregroundColor(.blue)
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding()
-                    Spacer()
-                }
-            } else {
-                // Placeholder to maintain layout when not detecting.
-                Rectangle()
-                    .frame(height: 90)
-                    .foregroundColor(.clear)
-            }
-            
-            // GPS Status
-            HStack {
-                Text("GPS")
-                Spacer()
-                Text(locationManager.gpsAvailable ? "ON" : "OFF")
-                    .foregroundColor(locationManager.gpsAvailable ? .green : .red)
-            }
-            
-            Divider()
-            
-            // GPS Accuracy
-            HStack {
-                Text("GPS accuracy (m)")
-                Spacer()
-                if let accuracy = locationManager.lastAccuracy {
-                    Text(String(format: "%.2f", accuracy)).foregroundColor(.green)
-                } else {
-                    Text("N/A").foregroundColor(.red)
-                }
-            }
-            
-            Divider()
-            
-            // Internet Connection
-            HStack {
-                Text("Internet connection")
-                Spacer()
-                Text(networkMonitor.internetAvailable ? "ON" : "OFF")
-                    .foregroundColor(networkMonitor.internetAvailable ? .green : .red)
-            }
-            
-            Divider()
-            
-            // Storage Available
-            HStack {
-                Text("Storage available")
-                Spacer()
-                Text("\(storageAvailable)GB")
-                    .foregroundColor(.green)
-            }
-            
-            Divider()
-            Spacer()
-            
-            ZStack(alignment: .bottom){
+        GeometryReader { geometry in
+            // Portrait mode
+            if geometry.size.width <= geometry.size.height {
                 VStack(alignment: .leading, spacing: 20) {
-                    HStack {
-                        Text("Detect containers")
-                        Spacer()
-                        Text(detectContainers ? "ON" : "OFF")
-                            .foregroundColor(detectContainers ? .green : .red)
+                    if isDetecting {
+                        HStack {
+                            Spacer()
+                            VStack(spacing: 16) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                                    .scaleEffect(2.0) // Increase the size of the circular indicator.
+                                Text("Detecting...")
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.blue)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding()
+                            Spacer()
+                        }
+                    } else {
+                        // Placeholder to maintain layout when not detecting.
+                        Rectangle()
+                            .frame(height: 90)
+                            .foregroundColor(.clear)
                     }
+                    
+                    // GPS Status
+                    infoRow(label: "GPS",
+                            value: locationManager.gpsAvailable ? "ON" : "OFF",
+                            valueColor: locationManager.gpsAvailable ? .green : .red)
                     
                     Divider()
                     
+                    // GPS Accuray
+                    infoRow(label: "GPS accuracy (m)",
+                            value: locationManager.lastAccuracy.map { String(format: "%.2f", $0) } ?? "N/A",
+                            valueColor: locationManager.lastAccuracy != nil ? .green : .red)
+                    
+                    Divider()
+                    
+                    // Internet Connection
+                    infoRow(label: "Internet connection",
+                            value: networkMonitor.internetAvailable ? "ON" : "OFF",
+                            valueColor: networkMonitor.internetAvailable ? .green : .red)
+                    
+                    Divider()
+                    
+                    // Storage Available
+                    infoRow(label: "Storage available",
+                            value: "\(storageAvailable)GB",
+                            valueColor: .green)
+                    
+                    Divider()
+                    
+                    // Detect containers
+                    infoRow(label: "Detect containers",
+                            value: detectContainers ? "ON" : "OFF",
+                            valueColor: detectContainers ? .green : .red)
+                    
+                    Divider()
+                    
+                    Spacer()
+                    
                     // Recorded Hours
-                    HStack {
-                        Text("Recorded hours")
-                        Spacer()
-                        Text(formattedTime)
-                            .foregroundColor(.gray)
-                    }
+                    infoRow(label: "Recorded hours",
+                            value: formattedTime)
                     
                     Divider()
                     
                     // Total Images
-                    HStack {
-                        Text("Total images")
-                        Spacer()
-                        Text("\(detectionManager.totalImages)")
-                            .foregroundColor(.gray)
-                    }
+                    infoRow(label: "Total images",
+                            value: "\(detectionManager.totalImages)")
                     
                     Divider()
                     
                     // Objects Detected
-                    HStack {
-                        Text("Objects detected")
-                        Spacer()
-                        Text("\(detectionManager.objectsDetected)")
-                            .foregroundColor(.gray)
-                    }
+                    infoRow(label: "Objects detected",
+                            value: "\(detectionManager.objectsDetected)")
                     
                     Divider()
                     
                     // Images Delivered
-                    HStack {
-                        Text("Images delivered")
-                        Spacer()
-                        Text("\(detectionManager.imagesDelivered)")
-                            .foregroundColor(.gray)
-                    }
+                    infoRow(label: "Images delivered",
+                            value: "\(detectionManager.imagesDelivered)")
                     
                     Divider()
                     
@@ -205,9 +183,111 @@ struct MainView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
+                .padding()
+            } else {
+                // Landscape mode
+                HStack(spacing: 20) {
+                    // Left column
+                    VStack(alignment: .leading, spacing: 16) {
+                        infoRow(label: "GPS",
+                                value: locationManager.gpsAvailable ? "ON" : "OFF",
+                                valueColor: locationManager.gpsAvailable ? .green : .red)
+                        
+                        Divider()
+                        
+                        infoRow(label: "GPS accuracy (m)",
+                                value: locationManager.lastAccuracy.map { String(format: "%.2f", $0) } ?? "N/A",
+                                valueColor: locationManager.lastAccuracy != nil ? .green : .red)
+                        
+                        Divider()
+                        
+                        infoRow(label: "Internet connection",
+                                value: networkMonitor.internetAvailable ? "ON" : "OFF",
+                                valueColor: networkMonitor.internetAvailable ? .green : .red)
+                        
+                        Divider()
+                        
+                        infoRow(label: "Storage available",
+                                value: "\(storageAvailable)GB",
+                                valueColor: .green)
+                        
+                        Divider()
+                        
+                        infoRow(label: "Detect containers",
+                                value: detectContainers ? "ON" : "OFF",
+                                valueColor: detectContainers ? .green : .red)
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            isDetecting = true
+                            detectionManager.startDetection()
+                        }) {
+                            Text("Detect")
+                        }
+                        .buttonStyle(DetectButtonStyle())
+                        .disabled(isDetecting || !locationManager.gpsAvailable)
+                    }
+                    .padding()
+                    
+                    // Right column
+                    VStack(alignment: .leading, spacing: 16) {
+                        
+                        infoRow(label: "Recorded hours",
+                                value: formattedTime)
+                        
+                        Divider()
+                        
+                        infoRow(label: "Total images",
+                                value: "\(detectionManager.totalImages)")
+                        
+                        Divider()
+                        
+                        infoRow(label: "Objects detected",
+                                value: "\(detectionManager.objectsDetected)")
+                        
+                        Divider()
+                        
+                        infoRow(label: "Images delivered",
+                                value: "\(detectionManager.imagesDelivered)")
+                        
+                        Divider()
+                        
+                        HStack {
+                            Text("Delivery progress")
+                            Spacer()
+                            ProgressView(value: Double(detectionManager.imagesDelivered), total: Double(detectionManager.totalImages))
+                                .progressViewStyle(LinearProgressViewStyle(tint: .green))
+                                .frame(width: 100)
+                        }
+                        
+                        Spacer()
+                        
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                showingStopConfirmation = true
+                            }) {
+                                Text("Stop")
+                            }
+                            .buttonStyle(StopButtonStyle())
+                            .disabled(!isDetecting)
+                            .alert("Confirm Stop", isPresented: $showingStopConfirmation) {
+                                Button("Stop", role: .destructive) {
+                                    isDetecting = false
+                                    detectionManager.stopDetection()
+                                }
+                                Button("Cancel", role: .cancel) { }
+                            } message: {
+                                Text("Are you sure you want to stop? This will interrupt detection.")
+                            }
+                        }
+                    }
+                    .padding()
+                }
+                .padding()
             }
         }
-        .padding()
         .onAppear {
             storageAvailable = getAvailableDiskSpace()
             detectionManager.deliverFilesFromDocuments()
