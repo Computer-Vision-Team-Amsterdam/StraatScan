@@ -8,46 +8,6 @@
 	<array>
 		<dict>
 			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>IoU Threshold</string>
-			<key>Key</key>
-			<string>iouThresText</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSSliderSpecifier</string>
-			<key>Key</key>
-			<string>iouThreshold</string>
-			<key>DefaultValue</key>
-			<real>0.45</real>
-			<key>MinimumValue</key>
-			<real>0.01</real>
-			<key>MaximumValue</key>
-			<integer>1</integer>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>Confidence Threshold</string>
-			<key>Key</key>
-			<string>confThresText</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSSliderSpecifier</string>
-			<key>Key</key>
-			<string>confidenceThreshold</string>
-			<key>DefaultValue</key>
-			<real>0.25</real>
-			<key>MinimumValue</key>
-			<real>0.01</real>
-			<key>MaximumValue</key>
-			<integer>1</integer>
-		</dict>
-		<dict>
-			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
 			<string>Detect containers</string>
@@ -55,6 +15,86 @@
 			<string>detectContainers</string>
 			<key>DefaultValue</key>
 			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Detect mobile toilets</string>
+			<key>Key</key>
+			<string>detectMobileToilets</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Detect scaffoldings</string>
+			<key>Key</key>
+			<string>detectScaffoldings</string>
+			<key>DefaultValue</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>IoU Threshold (Container)</string>
+			<key>Key</key>
+			<string>iouThreshold_container</string>
+			<key>DefaultValue</key>
+			<string>0.45</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>Confidence Threshold (Container)</string>
+			<key>Key</key>
+			<string>confidenceThreshold_container</string>
+			<key>DefaultValue</key>
+			<string>0.25</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>IoU Threshold (Mobile Toilets)</string>
+			<key>Key</key>
+			<string>iouThreshold_mobiletoilet</string>
+			<key>DefaultValue</key>
+			<string>0.45</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>Confidence Threshold (Mobile Toilets)</string>
+			<key>Key</key>
+			<string>confidenceThreshold_mobiletoilet</string>
+			<key>DefaultValue</key>
+			<string>0.25</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>IoU Threshold (Scaffolding)</string>
+			<key>Key</key>
+			<string>iouThreshold_scaffolding</string>
+			<key>DefaultValue</key>
+			<string>0.45</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTextFieldSpecifier</string>
+			<key>Title</key>
+			<string>Confidence Threshold (Scaffolding)</string>
+			<key>Key</key>
+			<string>confidenceThreshold_scaffolding</string>
+			<key>DefaultValue</key>
+			<string>0.25</string>
 		</dict>
 	</array>
 </dict>

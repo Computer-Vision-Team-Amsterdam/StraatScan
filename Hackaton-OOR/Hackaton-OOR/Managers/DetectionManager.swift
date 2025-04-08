@@ -21,8 +21,11 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     private var uploader: AzureIoTDataUploader?
     
     // Keep track of the last known user default values
-    private var lastConfidenceThreshold: Double = 0.25
-    private var lastIoUThreshold: Double = 0.45
+    private var lastThresholds: [String: (iou: Double, confidence: Double)] = [
+        "container": (iou: 0.45, confidence: 0.25),
+        "mobile toilet": (iou: 0.45, confidence: 0.25),
+        "scaffolding": (iou: 0.45, confidence: 0.25)
+    ]
     
     // Track whether the video capture has finished configuration.
     private(set) var isConfigured: Bool = false
@@ -122,15 +125,29 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
   
     /// Updates Thresholds if adjusted.
     private func updateThresholdsIfNeeded() {
-        let tempProvider = ThresholdManager.shared.getThresholdProvider()
-        let finalConf = tempProvider.confidenceThreshold
-        let finalIoU = tempProvider.iouThreshold
+        let newThresholdProvider = ThresholdManager.shared.getThresholdProvider()
+        let newThresholds = newThresholdProvider.thresholds
+        print("Updating thresholds with per-class values.")
         
-        if finalConf != lastConfidenceThreshold || finalIoU != lastIoUThreshold {
-            print("Updating thresholds: Confidence=\(finalConf), IoU=\(finalIoU)")
-            detector?.featureProvider = tempProvider
-            lastConfidenceThreshold = finalConf
-            lastIoUThreshold = finalIoU
+        var hasChanged = false
+        for (objectName, newValues) in newThresholds {
+            if let oldValues = lastThresholds[objectName] {
+                if oldValues.iou != newValues.iou || oldValues.confidence != newValues.confidence {
+                    hasChanged = true
+                    break
+                }
+            } else {
+                hasChanged = true
+                break
+            }
+        }
+        
+        if hasChanged {
+            print("Threshold changes detected. New thresholds: \(newThresholds)")
+            detector?.featureProvider = newThresholdProvider
+            lastThresholds = newThresholds
+        } else {
+            print("No changes in thresholds.")
         }
     }
     
@@ -164,21 +181,29 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     func processObservations(for request: VNRequest, error: Error?) {
         DispatchQueue.main.async(execute: {
             if let results = request.results as? [VNRecognizedObjectObservation] {
-                // --- Step 1: Check if at least one "container" is detected.
-                let containerDetected = results.contains { observation in
-                    if let label = observation.labels.first?.identifier.lowercased() {
-                        return label == "container"
+
+                let targetClasses: [(name: String, enabled: Bool)] = [
+                    ("container", UserDefaults.standard.bool(forKey: "detectContainers")),
+                    ("mobile toilet", UserDefaults.standard.bool(forKey: "detectMobileToilets")),
+                    ("scaffolding", UserDefaults.standard.bool(forKey: "detectScaffoldings"))
+                ]
+
+                // Check if at least one enabled target is detected in the observations.
+                let shouldProcess = targetClasses.contains { (objectName, isEnabled) in
+                    return isEnabled && results.contains { observation in
+                        if let label = observation.labels.first?.identifier.lowercased() {
+                            return label == objectName
+                        }
+                        return false
                     }
-                    return false
                 }
-                
-                // Only proceed if a container is detected.
-                if containerDetected {
+                if shouldProcess {
                     // --- Step 2: Identify sensitive objects and collect their bounding boxes.
                     // Define your sensitive classes.
                     let sensitiveClasses: Set<String> = ["person", "license plate"]
                     var sensitiveBoxes = [CGRect]()
-                    var containerBoxes = [CGRect]()
+                    var detectedBoxes: [String: [CGRect]] = [:]
+                    var detectionCounts: [String: Int] = [:]
                     
                     // For each observation that is sensitive, convert its normalized bounding box to image coordinates.
                     // (Assume 'image' is created from your saved pixel buffer.)
@@ -187,28 +212,36 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                         
                         let imageSize = image.size
                         for observation in results {
-                            if let label = observation.labels.first?.identifier.lowercased(){
-                                print(label)
+                            if let label = observation.labels.first?.identifier.lowercased() {
                                 let normRect = observation.boundingBox
-                                print(normRect)
                                 let rectInImage = VNImageRectForNormalizedRect(normRect, Int(imageSize.width), Int(imageSize.height))
-                                print(rectInImage)
-                                if label == "container" {
-                                    DispatchQueue.main.async {
-                                        self.objectsDetected += 1
-                                    }
-                                    containerBoxes.append(rectInImage)
+
+                                if targetClasses.contains(where: { $0.enabled && $0.name == label }) {
+                                    detectedBoxes[label, default: []].append(rectInImage)
+                                    detectionCounts[label, default: 0] += 1
                                 } else if sensitiveClasses.contains(label) {
                                     sensitiveBoxes.append(rectInImage)
                                 }
                             }
+                        }
+
+                        let totalDetected = detectionCounts.values.reduce(0, +)
+                        DispatchQueue.main.async {
+                            self.objectsDetected += totalDetected
                         }
                         
                         if !sensitiveBoxes.isEmpty,
                            let imageWithBlackBoxes = self.coverSensitiveAreasWithBlackBox(in: image, boxes: sensitiveBoxes) {
                             image = imageWithBlackBoxes
                         }
-                        image = self.drawSquaresAroundContainerAreas(in: image, boxes: containerBoxes)
+
+                        let colors: [String: UIColor] = [
+                        "container": .red,
+                        "mobile toilet": .blue,
+                        "scaffolding": .green
+                        ]
+
+                        image = self.drawSquaresAroundDetectedAreas(in: image, boxesPerObject: detectedBoxes, colors: colors)
                         self.deliverDetectionToAzure(image: image, predictions: results)
                         self.lastPixelBufferForSaving = nil
                     }
@@ -427,10 +460,10 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         return nil
     }
 
-    func drawSquaresAroundContainerAreas(
+    func drawSquaresAroundDetectedAreas(
         in image: UIImage,
-        boxes: [CGRect],
-        color: UIColor = .red,
+        boxesPerObject: [String: [CGRect]],
+        colors: [String: UIColor],
         lineWidth: CGFloat = 3.0
     ) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: image.size)
@@ -438,19 +471,22 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             // Draw the image (assumed to be drawn in the top-left origin space)
             image.draw(at: .zero)
             
-            context.cgContext.setStrokeColor(color.cgColor)
-            context.cgContext.setLineWidth(lineWidth)
-            
-            for box in boxes {
-                // Convert the box from Vision's coordinate system (bottom-left origin)
-                // to UIKit’s coordinate system (top-left origin)
-                let adjustedBox = CGRect(
-                    x: box.origin.x,
-                    y: image.size.height - box.origin.y - box.size.height,
-                    width: box.size.width,
-                    height: box.size.height
-                )
-                context.cgContext.stroke(adjustedBox)
+            for (label, boxes) in boxesPerObject {
+                let color = colors[label] ?? .yellow // Default if label not found.
+                context.cgContext.setStrokeColor(color.cgColor)
+                context.cgContext.setLineWidth(3.0)
+                
+                for box in boxes {
+                    // Adjust for coordinate system conversion.
+                    let adjustedBox = CGRect(
+                        x: box.origin.x,
+                        y: image.size.height - box.origin.y - box.size.height,
+                        width: box.size.width,
+                        height: box.size.height
+                    )
+                    context.cgContext.stroke(adjustedBox)
+                    // Optionally add text labels here.
+                }
             }
         }
     }
