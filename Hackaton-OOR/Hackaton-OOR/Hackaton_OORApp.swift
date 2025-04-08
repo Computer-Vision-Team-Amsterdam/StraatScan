@@ -14,10 +14,6 @@ struct Hackaton_OORApp: App {
                                                   "iouThreshold": 0.45,
                                                   "confidenceThreshold": 0.25])
         IoTDeviceManager.shared.setupDeviceCredentials()
-        if let path = Bundle.main.path(forResource: "Info", ofType: "plist"),
-           let info = NSDictionary(contentsOfFile: path) {
-            print("DEVICE_SAS_TOKEN:", info["DEVICE_SAS_TOKEN"] ?? "Missing")
-        }
     }
     
     var body: some Scene {

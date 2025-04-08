@@ -116,8 +116,6 @@ class AzureIoTDataUploader {
         IoTDeviceManager.shared.setupDeviceCredentials()
         self.deviceId = IoTDeviceManager.shared.deviceId!.trimmingCharacters(in: .init(charactersIn: "\""))
         self.sasToken = IoTDeviceManager.shared.deviceSasToken!.trimmingCharacters(in: .init(charactersIn: "\""))
-        print("Refreshed deviceId: \(deviceId)")
-        print("Refreshed sasToken: \(sasToken)")
     }
     
     private func uploadToBlob(data: Data,
