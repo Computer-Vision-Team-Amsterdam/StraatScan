@@ -146,7 +146,8 @@ struct MainView: View {
                     HStack {
                         Text("Delivery progress")
                         Spacer()
-                        ProgressView(value: Double(detectionManager.imagesDelivered), total: Double(detectionManager.totalImages))
+                        ProgressView(value: Double(detectionManager.imagesDelivered),
+                                     total: Double(detectionManager.totalImages))
                             .progressViewStyle(LinearProgressViewStyle(tint: .green))
                             .frame(width: 100)
                     }
@@ -184,6 +185,7 @@ struct MainView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .padding()
+                
             } else {
                 // Landscape mode
                 HStack(spacing: 20) {
@@ -219,14 +221,25 @@ struct MainView: View {
                         
                         Spacer()
                         
-                        Button(action: {
-                            isDetecting = true
-                            detectionManager.startDetection()
-                        }) {
-                            Text("Detect")
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                showingStopConfirmation = true
+                            }) {
+                                Text("Stop")
+                            }
+                            .buttonStyle(StopButtonStyle())
+                            .disabled(!isDetecting)
+                            .alert("Confirm Stop", isPresented: $showingStopConfirmation) {
+                                Button("Stop", role: .destructive) {
+                                    isDetecting = false
+                                    detectionManager.stopDetection()
+                                }
+                                Button("Cancel", role: .cancel) { }
+                            } message: {
+                                Text("Are you sure you want to stop? This will interrupt detection.")
+                            }
                         }
-                        .buttonStyle(DetectButtonStyle())
-                        .disabled(isDetecting || !locationManager.gpsAvailable)
                     }
                     .padding()
                     
@@ -256,32 +269,33 @@ struct MainView: View {
                         HStack {
                             Text("Delivery progress")
                             Spacer()
-                            ProgressView(value: Double(detectionManager.imagesDelivered), total: Double(detectionManager.totalImages))
+                            ProgressView(value: Double(detectionManager.imagesDelivered),
+                                         total: Double(detectionManager.totalImages))
                                 .progressViewStyle(LinearProgressViewStyle(tint: .green))
                                 .frame(width: 100)
                         }
                         
                         Spacer()
                         
-                        HStack {
-                            Spacer()
-                            Button(action: {
-                                showingStopConfirmation = true
-                            }) {
-                                Text("Stop")
+                        Button(action: {
+                            if !isDetecting {
+                                isDetecting = true
+                                detectionManager.startDetection()
                             }
-                            .buttonStyle(StopButtonStyle())
-                            .disabled(!isDetecting)
-                            .alert("Confirm Stop", isPresented: $showingStopConfirmation) {
-                                Button("Stop", role: .destructive) {
-                                    isDetecting = false
-                                    detectionManager.stopDetection()
+                        }) {
+                            if isDetecting {
+                                HStack {
+                                    Text("Detecting   ")
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(1.5)
                                 }
-                                Button("Cancel", role: .cancel) { }
-                            } message: {
-                                Text("Are you sure you want to stop? This will interrupt detection.")
+                            } else {
+                                Text("Detect")
                             }
                         }
+                        .buttonStyle(DetectButtonStyle())
+                        .disabled(isDetecting || !locationManager.gpsAvailable)
                     }
                     .padding()
                 }
