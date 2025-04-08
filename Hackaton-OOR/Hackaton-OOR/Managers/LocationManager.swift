@@ -26,11 +26,13 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     }
     
     func update(_ location: CLLocation?) {
-        lastKnownLocation = location?.coordinate
-        lastAccuracy = location?.horizontalAccuracy
-        lastHeading = location?.course
-        lastTimestamp = location?.timestamp.timeIntervalSince1970
-        gpsAvailable = true
+        DispatchQueue.main.async {
+            self.lastKnownLocation = location?.coordinate
+            self.lastAccuracy = location?.horizontalAccuracy
+            self.lastHeading = location?.course
+            self.lastTimestamp = location?.timestamp.timeIntervalSince1970
+            self.gpsAvailable = true
+        }
     }
     
     func checkLocationAuthorization() {
@@ -52,7 +54,6 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
 
         @unknown default:
             print("Location service disabled")
-        
         }
     }
     
@@ -66,14 +67,20 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         checkLocationAuthorization()
         if status == .authorizedWhenInUse || status == .authorizedAlways {
-            gpsAvailable = true
+            DispatchQueue.main.async {
+                self.gpsAvailable = true
+            }
         } else {
-            gpsAvailable = false
+            DispatchQueue.main.async {
+                self.gpsAvailable = false
+            }
         }
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        gpsAvailable = false
-        lastAccuracy = nil
+        DispatchQueue.main.async {
+            self.gpsAvailable = false
+            self.lastAccuracy = nil
+        }
     }
 }

@@ -3,31 +3,57 @@ import Security
 
 class IoTDeviceManager {
     static let shared = IoTDeviceManager()
-    private let deviceIdKey = "device_id"
-    private let deviceSasKey = "device_sas_token"
+
+    private let deviceIdKey = "DEVICE_ID"
+    private let sasTokenKey = "DEVICE_SAS_TOKEN"
 
     var deviceId: String? {
-        if let id = KeychainHelper.get(key: deviceIdKey) {
-            return id
-        } else if let id = Bundle.main.infoDictionary?["DEVICE_ID"] as? String {
-            KeychainHelper.save(key: deviceIdKey, value: id)
-            return id
-        }
-        return nil
+        return readFromKeychain(forKey: deviceIdKey)
     }
 
     var deviceSasToken: String? {
-        if let token = KeychainHelper.get(key: deviceSasKey) {
-            return token
-        } else if let token = Bundle.main.infoDictionary?["DEVICE_SAS_TOKEN"] as? String {
-            KeychainHelper.save(key: deviceSasKey, value: token)
-            return token
-        }
-        return nil
+        return readFromKeychain(forKey: sasTokenKey)
     }
 
-    func clearSecrets() {
-        KeychainHelper.save(key: deviceIdKey, value: "")
-        KeychainHelper.save(key: deviceSasKey, value: "")
+    func setupDeviceCredentials() {
+        if let deviceId = Bundle.main.infoDictionary?[deviceIdKey] as? String, !deviceId.isEmpty {
+            saveToKeychain(value: deviceId, forKey: deviceIdKey)
+        }
+        if let token = Bundle.main.infoDictionary?[sasTokenKey] as? String, !token.isEmpty {
+            saveToKeychain(value: token, forKey: sasTokenKey)
+        }        
+    }
+
+    private func saveToKeychain(value: String, forKey key: String) {
+        let data = Data(value.utf8)
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: data
+        ]
+
+        SecItemDelete(query as CFDictionary) // Remove if already exists
+        SecItemAdd(query as CFDictionary, nil)
+    }
+
+    private func readFromKeychain(forKey key: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var dataTypeRef: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &dataTypeRef)
+
+        if status == errSecSuccess,
+           let data = dataTypeRef as? Data,
+           let value = String(data: data, encoding: .utf8) {
+            return value
+        }
+
+        return nil
     }
 }

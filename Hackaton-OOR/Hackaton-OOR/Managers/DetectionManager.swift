@@ -29,31 +29,23 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     
     // Create an instance of the data uploader.
     private let iotHubHost = "iothub-oor-ont-weu-itr-01.azure-devices.net"
-//    private let deviceId = "test-Sebastian"
-//    private let deviceSasToken = ""
-    
-    private let deviceId = "test_niek"
-    private let deviceSasToken = ""
     
     @Published var objectsDetected = 0
     @Published var totalImages = 0
     @Published var imagesDelivered = 0
+    @Published var minutesRunning = 0
     
     private var detectionTimer: Timer?
-    @Published var minutesRunning = 0
     
     // MARK: - Initialization
     
     override init() {
         super.init()
-        self.uploader = AzureIoTDataUploader(host: self.iotHubHost, deviceId: self.deviceId, sasToken: self.deviceSasToken)
+        self.uploader = AzureIoTDataUploader(host: self.iotHubHost)
         
         // 1. Load the YOLO model.
         let modelConfig = MLModelConfiguration()
-        // (Optional) Enable new experimental options for iOS 17+
-        if #available(iOS 17.0, *) {
-            modelConfig.setValue(1, forKey: "experimentalMLE5EngineUsage")
-        }
+        modelConfig.computeUnits = .all
         
         do {
             // Replace `yolov8m` with the actual name of your generated model class.
@@ -194,9 +186,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                                 let rectInImage = VNImageRectForNormalizedRect(normRect, Int(imageSize.width), Int(imageSize.height))
                                 print(rectInImage)
                                 if label == "container" {
-                                    DispatchQueue.main.async {
-                                        self.objectsDetected += 1
-                                    }
+                                    self.objectsDetected += 1
                                     containerBoxes.append(rectInImage)
                                 } else if sensitiveClasses.contains(label) {
                                     sensitiveBoxes.append(rectInImage)
