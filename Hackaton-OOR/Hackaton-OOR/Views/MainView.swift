@@ -72,7 +72,6 @@ struct MainView: View {
             
             HStack {
                 Text("Show Camera View")
-                    .font(.headline)
                 Spacer()
                 Toggle("", isOn: $showCameraView)
                     .toggleStyle(SwitchToggleStyle(tint: .blue))
@@ -234,6 +233,9 @@ struct MainView: View {
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             detectContainers = UserDefaults.standard.bool(forKey: "detectContainers")
             print("detectContainers updated: \(detectContainers)")
+        }
+        .fullScreenCover(isPresented: $showCameraView) {
+            CameraViewContainer(isCameraPresented: $showCameraView)
         }
     }
 }
