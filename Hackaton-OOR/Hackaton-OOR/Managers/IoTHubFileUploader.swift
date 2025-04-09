@@ -2,6 +2,7 @@ import Foundation
 
 // MARK: - Model Structures
 
+/// Represents the response from the Azure IoT Hub when requesting file upload information.
 struct FileUploadResponse: Codable {
     let correlationId: String
     let hostName: String
@@ -10,6 +11,7 @@ struct FileUploadResponse: Codable {
     let sasToken: String
 }
 
+/// Represents the notification payload sent to Azure IoT Hub after a file upload.
 struct FileUploadNotification: Codable {
     let correlationId: String
     let isSuccess: Bool
@@ -19,18 +21,26 @@ struct FileUploadNotification: Codable {
 
 // MARK: - Azure IoT Data Uploader
 
+/// Handles uploading data to Azure IoT Hub using the file upload mechanism.
 class AzureIoTDataUploader {
     private let host: String
     private var deviceId: String
     private var sasToken: String
     private let apiVersion: String = "2021-04-12"
     
+    /// Initializes the uploader with the Azure IoT Hub host.
+    /// - Parameter host: The Azure IoT Hub host URL.
     init(host: String) {
         self.host = host
         self.deviceId = IoTDeviceManager.shared.deviceId!.trimmingCharacters(in: .init(charactersIn: "\""))
         self.sasToken = IoTDeviceManager.shared.deviceSasToken!.trimmingCharacters(in: .init(charactersIn: "\""))
     }
     
+    /// Uploads data to Azure IoT Hub.
+    /// - Parameters:
+    ///   - data: The data to upload.
+    ///   - blobName: The name of the blob to create in Azure Storage.
+    ///   - completion: A closure called with an error if the upload fails, or `nil` if successful.
     func uploadData(_ data: Data, blobName: String, completion: @escaping (Error?) -> Void) {
         requestFileUpload(blobName: blobName, retryOn401: true) { result in
             switch result {
@@ -53,6 +63,11 @@ class AzureIoTDataUploader {
         }
     }
     
+    /// Requests file upload information from Azure IoT Hub.
+    /// - Parameters:
+    ///   - blobName: The name of the blob to create in Azure Storage.
+    ///   - retryOn401: Whether to retry the request if a 401 Unauthorized response is received.
+    ///   - completion: A closure called with the result of the request.
     private func requestFileUpload(blobName: String,
                                    retryOn401: Bool = true,
                                    completion: @escaping (Result<FileUploadResponse, Error>) -> Void) {
@@ -112,12 +127,18 @@ class AzureIoTDataUploader {
         }.resume()
     }
     
+    /// Refreshes the device credentials by reloading them from the Keychain.
     private func refreshCredentials() {
         IoTDeviceManager.shared.setupDeviceCredentials()
         self.deviceId = IoTDeviceManager.shared.deviceId!.trimmingCharacters(in: .init(charactersIn: "\""))
         self.sasToken = IoTDeviceManager.shared.deviceSasToken!.trimmingCharacters(in: .init(charactersIn: "\""))
     }
     
+    /// Uploads data to the Azure Storage blob using the provided upload response.
+    /// - Parameters:
+    ///   - data: The data to upload.
+    ///   - uploadResponse: The response containing the blob upload details.
+    ///   - completion: A closure called with the result of the upload.
     private func uploadToBlob(data: Data,
                               uploadResponse: FileUploadResponse,
                               completion: @escaping (Result<Void, Error>) -> Void) {
@@ -156,6 +177,11 @@ class AzureIoTDataUploader {
         }.resume()
     }
     
+    /// Notifies Azure IoT Hub of the result of a file upload.
+    /// - Parameters:
+    ///   - correlationId: The correlation ID from the file upload response.
+    ///   - isSuccess: Whether the upload was successful.
+    ///   - completion: A closure called with an error if the notification fails, or `nil` if successful.
     private func notifyFileUpload(correlationId: String,
                                   isSuccess: Bool,
                                   completion: @escaping (Error?) -> Void) {

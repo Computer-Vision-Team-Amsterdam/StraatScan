@@ -1,15 +1,28 @@
 import Foundation
 import CoreLocation
 
+/// A manager for handling location updates and managing location-related permissions.
 final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObject {
     
+    /// Indicates whether GPS is available.
     @Published var gpsAvailable: Bool = false
+    
+    /// The last known location coordinates.
     @Published var lastKnownLocation: CLLocationCoordinate2D?
+    
+    /// The accuracy of the last known location.
     @Published var lastAccuracy: CLLocationAccuracy?
+    
+    /// The heading direction of the last known location.
     @Published var lastHeading: CLLocationDirection?
+    
+    /// The timestamp of the last known location.
     @Published var lastTimestamp: TimeInterval?
+    
+    /// The underlying `CLLocationManager` instance.
     private var locationManager = CLLocationManager()
     
+    /// Initializes the `LocationManager` and starts location updates.
     override init() {
         super.init()
         locationManager.delegate = self
@@ -25,6 +38,8 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         }
     }
     
+    /// Updates the published properties with the latest location data.
+    /// - Parameter location: The latest location data.
     func update(_ location: CLLocation?) {
         DispatchQueue.main.async {
             self.lastKnownLocation = location?.coordinate
@@ -35,35 +50,50 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         }
     }
     
+    /// Checks the current location authorization status and requests permission if needed.
     func checkLocationAuthorization() {
         switch locationManager.authorizationStatus {
-        case .notDetermined://The user did not choose allow or deny your app to get the location yet
+        case .notDetermined:
+            // The user has not yet chosen to allow or deny location access.
             locationManager.requestWhenInUseAuthorization()
             
-        case .restricted://The user cannot change this app’s status, possibly due to active restrictions such as parental controls being in place.
+        case .restricted:
+            // The user cannot change this app’s status due to restrictions (e.g., parental controls).
             print("Location restricted")
             
-        case .denied://The user dennied your app to get location or disabled the services location or the phone is in airplane mode
+        case .denied:
+            // The user denied location access or location services are disabled.
             print("Location denied")
             
-        case .authorizedAlways://This authorization allows you to use all location services and receive location events whether or not your app is in use.
+        case .authorizedAlways:
+            // The app is authorized to use location services at all times.
             print("Location authorizedAlways")
             
-        case .authorizedWhenInUse://This authorization allows you to use all location services and receive location events only when your app is in use
+        case .authorizedWhenInUse:
+            // The app is authorized to use location services only when in use.
             print("Location authorized when in use")
 
         @unknown default:
+            // Handle any future cases.
             print("Location service disabled")
         }
     }
     
+    /// Called when the location manager updates the location.
+    /// - Parameters:
+    ///   - manager: The location manager instance.
+    ///   - locations: An array of updated locations.
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         if let latestLocation = locations.last {
             update(latestLocation)
         }
     }
     
-    // Update gpsAvailable when authorization status changes.
+    /// Called when the authorization status changes.
+    /// Updates `gpsAvailable` based on the new status.
+    /// - Parameters:
+    ///   - manager: The location manager instance.
+    ///   - status: The new authorization status.
     func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         checkLocationAuthorization()
         if status == .authorizedWhenInUse || status == .authorizedAlways {
@@ -77,6 +107,10 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         }
     }
     
+    /// Called when the location manager fails to retrieve a location.
+    /// - Parameters:
+    ///   - manager: The location manager instance.
+    ///   - error: The error that occurred.
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         DispatchQueue.main.async {
             self.gpsAvailable = false
