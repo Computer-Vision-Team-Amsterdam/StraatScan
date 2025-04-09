@@ -53,7 +53,7 @@ struct MainView: View {
                     VStack(spacing: 16) {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-                            .scaleEffect(2.0) // Increase the size of the circular indicator.
+                            .scaleEffect(1.5) // Increase the size of the circular indicator.
                         Text("Detecting...")
                             .font(.title3)
                             .fontWeight(.bold)
@@ -121,9 +121,8 @@ struct MainView: View {
                 Text("\(storageAvailable)GB")
                     .foregroundColor(.green)
             }
-            
+        
             Divider()
-            Spacer()
             
             ZStack(alignment: .bottom){
                 VStack(alignment: .leading, spacing: 20) {
