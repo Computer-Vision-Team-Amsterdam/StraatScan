@@ -32,6 +32,7 @@ struct MainView: View {
     @State private var imagesDelivered: Double = 0
     @State private var imagesToDeliver: Double = 10 // for simulation; replace with your actual value
     @State private var showingStopConfirmation = false
+    @State private var showCameraView: Bool = false
     
     let storageTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect()
     let deliverToAzureTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect() // simulate progress every 1 sec
@@ -68,6 +69,18 @@ struct MainView: View {
                     .frame(height: 90)
                     .foregroundColor(.clear)
             }
+            
+            HStack {
+                Text("Show Camera View")
+                    .font(.headline)
+                Spacer()
+                Toggle("", isOn: $showCameraView)
+                    .toggleStyle(SwitchToggleStyle(tint: .blue))
+                    .disabled(isDetecting)
+                    
+            }
+            
+            Divider()
             
             // GPS Status
             HStack {
