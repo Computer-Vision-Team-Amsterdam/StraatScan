@@ -69,8 +69,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     override init() {
         // Fetch values from Info.plist
         let infoDict = Bundle.main.infoDictionary
-        self.lastConfidenceThreshold = Double(infoDict?["ConfidenceThreshold"] as? String ?? "0.25")
-        self.lastIoUThreshold = Double(infoDict?["IoUThreshold"] as? String ?? "0.45")
+        self.lastConfidenceThreshold = Double(infoDict?["ConfidenceThreshold"] as? String ?? "0.25") ?? 0.25
+        self.lastIoUThreshold = Double(infoDict?["IoUThreshold"] as? String ?? "0.45") ?? 0.45
         self.iotHubHost = infoDict?["IoTHubHost"] as? String ?? "iothub-oor-ont-weu-itr-01.azure-devices.net"
         
         super.init()

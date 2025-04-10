@@ -27,15 +27,9 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         super.init()
         locationManager.delegate = self
         checkLocationAuthorization()
-        locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.activityType = CLActivityType.otherNavigation
         locationManager.startUpdatingLocation()
-        
-        if CLLocationManager.headingAvailable() {
-            locationManager.startUpdatingHeading()
-        } else {
-            print("No compass available")
-        }
     }
     
     /// Updates the published properties with the latest location data.
