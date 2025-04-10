@@ -8,7 +8,7 @@ struct CameraViewContainer: View {
     
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            CameraViewControllerRepresentable()
+            CameraPreviewRepresentable()
                 .edgesIgnoringSafeArea(.all)
             Button {
                 isCameraPresented = false
@@ -23,17 +23,17 @@ struct CameraViewContainer: View {
     }
 }
 
-// MARK: - UIViewControllerRepresentable for the Camera Preview
-struct CameraViewControllerRepresentable: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> CameraPreviewViewController {
-        CameraPreviewViewController()
+// MARK: - CameraPreviewRepresentable for the Camera Preview
+struct CameraPreviewRepresentable: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> CameraPreviewController {
+        CameraPreviewController()
     }
     
-    func updateUIViewController(_ uiViewController: CameraPreviewViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: CameraPreviewController, context: Context) {}
 }
 
-// MARK: - UIKit Camera Preview View Controller
-class CameraPreviewViewController: UIViewController {
+// MARK: - UIKit Camera Preview Controller
+class CameraPreviewController: UIViewController {
     var captureSession: AVCaptureSession!
     var videoPreviewLayer: AVCaptureVideoPreviewLayer!
     
@@ -41,6 +41,7 @@ class CameraPreviewViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .black
         
+        // Set up the capture session.
         captureSession = AVCaptureSession()
         captureSession.sessionPreset = .high
         
@@ -52,10 +53,12 @@ class CameraPreviewViewController: UIViewController {
         }
         captureSession.addInput(videoInput)
         
+        // Set up the preview layer.
         videoPreviewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
         videoPreviewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(videoPreviewLayer)
         
+        // Start running the session asynchronously.
         DispatchQueue.global(qos: .userInitiated).async {
             self.captureSession.startRunning()
         }
@@ -68,28 +71,28 @@ class CameraPreviewViewController: UIViewController {
     }
     
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
-        coordinator.animate(alongsideTransition: { _ in
+        coordinator.animate { _ in
             self.videoPreviewLayer.frame = self.view.bounds
             self.updateVideoOrientation()
-        })
+        }
     }
     
     private func updateVideoOrientation() {
-        guard let connection = videoPreviewLayer.connection, connection.isVideoOrientationSupported else { return }
-        let orientation = view.window?.windowScene?.interfaceOrientation ?? .portrait
-        connection.videoOrientation = orientation.avOrientation
-    }
-}
-
-// MARK: - Orientation Mapping Extension
-extension UIInterfaceOrientation {
-    var avOrientation: AVCaptureVideoOrientation {
-        switch self {
-        case .portrait: return .portrait
-        case .portraitUpsideDown: return .portraitUpsideDown
-        case .landscapeLeft: return .landscapeLeft
-        case .landscapeRight: return .landscapeRight
-        default: return .portrait
+        guard let connection = videoPreviewLayer.connection else { return }
+        
+        let orientation = UIDevice.current.orientation
+        
+        switch orientation {
+        case .portrait:
+            connection.videoRotationAngle = 90
+        case .portraitUpsideDown:
+            connection.videoRotationAngle = 270
+        case .landscapeLeft:
+            connection.videoRotationAngle = 0
+        case .landscapeRight:
+            connection.videoRotationAngle = 180
+        default:
+            connection.videoRotationAngle = 90
         }
     }
 }
