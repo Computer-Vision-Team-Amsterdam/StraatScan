@@ -71,12 +71,18 @@ struct MainView: View {
             }
             
             HStack {
-                Text("Show Camera View")
+                Text("Camera Preview")
                 Spacer()
-                Toggle("", isOn: $showCameraView)
-                    .toggleStyle(SwitchToggleStyle(tint: .blue))
-                    .disabled(isDetecting)
-                    
+                Button(action: {
+                    showCameraView = true
+                }) {
+                    Image(systemName: "camera.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .foregroundColor(isDetecting ? Color.gray : Color.blue)
+                }
+                .disabled(isDetecting)
             }
             
             Divider()
