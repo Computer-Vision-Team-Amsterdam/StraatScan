@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreLocation
 import Network
+import AVFoundation
 
 func getAvailableDiskSpace() -> Int {
     let fileURL = URL(fileURLWithPath: NSHomeDirectory())
@@ -33,6 +34,8 @@ struct MainView: View {
     @State private var imagesToDeliver: Double = 10 // for simulation; replace with your actual value
     @State private var showingStopConfirmation = false
     @State private var showCameraView: Bool = false
+    @State private var isCameraAuthorized: Bool = false
+    @State private var showCameraAccessDeniedAlert: Bool = false
     
     let storageTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect()
     let deliverToAzureTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect() // simulate progress every 1 sec
@@ -74,7 +77,14 @@ struct MainView: View {
                 Text("Camera Preview")
                 Spacer()
                 Button(action: {
-                    showCameraView = true
+                    CameraManager.checkAndRequestCameraAccess { authorized in
+                        isCameraAuthorized = authorized
+                        if authorized {
+                            showCameraView = true
+                        } else {
+                            showCameraAccessDeniedAlert = true
+                        }
+                    }
                 }) {
                     Image(systemName: "camera.fill")
                         .resizable()
@@ -212,8 +222,15 @@ struct MainView: View {
                         }
                         
                         Button(action: {
-                            isDetecting = true
-                            detectionManager.startDetection()
+                            CameraManager.checkAndRequestCameraAccess { authorized in
+                                isCameraAuthorized = authorized
+                                if authorized {
+                                    isDetecting = true
+                                    detectionManager.startDetection()
+                                } else {
+                                    showCameraAccessDeniedAlert = true
+                                }
+                            }
                         }) {
                             Text("Detect")
                         }
@@ -228,6 +245,9 @@ struct MainView: View {
         .onAppear {
             storageAvailable = getAvailableDiskSpace()
             detectionManager.deliverFilesFromDocuments()
+            CameraManager.checkAndRequestCameraAccess { authorized in
+                isCameraAuthorized = authorized
+            }
         }
         .onReceive(storageTimer) { _ in
             storageAvailable = getAvailableDiskSpace()
@@ -241,6 +261,9 @@ struct MainView: View {
         }
         .fullScreenCover(isPresented: $showCameraView) {
             CameraViewContainer(isCameraPresented: $showCameraView)
+        }
+        .alert(isPresented: $showCameraAccessDeniedAlert) {
+            CameraManager.showCameraAccessDeniedAlert()
         }
     }
 }

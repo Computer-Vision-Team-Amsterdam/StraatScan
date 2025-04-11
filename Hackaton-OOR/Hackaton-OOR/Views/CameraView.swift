@@ -48,7 +48,7 @@ class CameraPreviewController: UIViewController {
         guard let videoDevice = AVCaptureDevice.default(for: .video),
               let videoInput = try? AVCaptureDeviceInput(device: videoDevice),
               captureSession.canAddInput(videoInput) else {
-            print("Failed to set up video input")
+            CameraManager.presentVideoInputErrorAlert(on: self)
             return
         }
         captureSession.addInput(videoInput)
