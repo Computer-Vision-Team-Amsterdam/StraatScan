@@ -39,6 +39,7 @@ class CameraManager {
         )
     }
     
+    /// Returns an Alert to be shown when failed to set up the video input for camera preview.
     static func presentVideoInputErrorAlert(on viewController: UIViewController) {
         let alert = UIAlertController(
             title: "Camera Error",
