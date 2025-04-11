@@ -43,7 +43,7 @@ struct MainView: View {
         formatter.zeroFormattingBehavior = [.pad]
         return formatter.string(from: TimeInterval(totalSeconds)) ?? "00:00"
     }
-    // A helper view for a row with a label and a value.
+    // A helper function to create a UI row entry with a label and a value.
     private func infoRow(label: String, value: String, valueColor: Color = .gray) -> some View {
         HStack {
             Text(label)
