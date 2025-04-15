@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import Logging
 
 /// A SwiftUI view that displays a live camera preview using the VideoCapture class.
 struct CameraView: View {
@@ -41,6 +42,9 @@ struct CameraView: View {
 
 /// A UIViewRepresentable that hosts the camera’s preview layer.
 struct CameraPreview: UIViewRepresentable {
+    /// Create a logger specific to this manager
+    private let managerLogger = Logger(label: "nl.amsterdam.cvt.hackaton-ios.CameraPreview")
+    
     let videoCapture: VideoCapture
     
     func makeUIView(context: Context) -> UIView {
@@ -61,7 +65,7 @@ struct CameraPreview: UIViewRepresentable {
                     }
                 }
             } else {
-                print("Failed to set up camera.")
+                self.managerLogger.critical("Failed to set up camera.")
             }
         }
         return view
@@ -79,6 +83,9 @@ struct CameraPreview: UIViewRepresentable {
 
 /// An ObservableObject wrapper that manages the VideoCapture instance.
 final class CameraManager: ObservableObject {
+    /// Create a logger specific to this manager
+    private let managerLogger = Logger(label: "nl.amsterdam.cvt.hackaton-ios.CameraManager")
+    
     let videoCapture = VideoCapture()
     
     /// Starts the camera capture session.
@@ -88,7 +95,7 @@ final class CameraManager: ObservableObject {
             if success {
                 self.videoCapture.start()
             } else {
-                print("CameraManager: Camera setup failed.")
+                self.managerLogger.critical("Camera setup failed.")
             }
         }
     }

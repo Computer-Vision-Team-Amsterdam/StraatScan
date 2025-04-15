@@ -17,9 +17,11 @@ func getAvailableDiskSpace() -> Int {
 }
 
 struct MainView: View {
+    @EnvironmentObject var iotManager: IoTDeviceManager
     @StateObject private var locationManager = LocationManager()
     @StateObject private var networkMonitor = NetworkMonitor()
-    @ObservedObject private var detectionManager = DetectionManager()
+    @ObservedObject private var detectionManager = DetectionManager.shared
+    
     @State private var storageAvailable: Int = 0
     @State private var detectContainers: Bool = UserDefaults.standard.bool(forKey: "detectContainers")
     
@@ -29,17 +31,18 @@ struct MainView: View {
     
     // Detection-related states
     @State private var isDetecting: Bool = false
-    @State private var imagesDelivered: Double = 0
-    @State private var imagesToDeliver: Double = 10 // for simulation; replace with your actual value
     @State private var showingStopConfirmation = false
     
+    // Timer to check storage periodically
     let storageTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect()
-    let deliverToAzureTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect() // simulate progress every 1 sec
+    // Timer to attempt uploading stored files periodically (e.g., every 5 minutes)
+    let deliverToAzureTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect()
+    
     var formattedTime: String {
         let totalSeconds = detectionManager.minutesRunning * 60
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.hour, .minute]
-        formatter.unitsStyle = .positional    // This produces "HH:mm:ss"
+        formatter.unitsStyle = .positional
         formatter.zeroFormattingBehavior = [.pad]
         return formatter.string(from: TimeInterval(totalSeconds)) ?? "00:00"
     }
@@ -52,7 +55,7 @@ struct MainView: View {
                     VStack(spacing: 16) {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-                            .scaleEffect(2.0) // Increase the size of the circular indicator.
+                            .scaleEffect(2.0)
                         Text("Detecting...")
                             .font(.title3)
                             .fontWeight(.bold)
@@ -62,6 +65,7 @@ struct MainView: View {
                     .padding()
                     Spacer()
                 }
+                .frame(height: 90)
             } else {
                 // Placeholder to maintain layout when not detecting.
                 Rectangle()
@@ -168,7 +172,7 @@ struct MainView: View {
                     HStack {
                         Text("Delivery progress")
                         Spacer()
-                        ProgressView(value: Double(detectionManager.imagesDelivered), total: Double(detectionManager.totalImages))
+                        ProgressView(value: Double(detectionManager.imagesDelivered), total: max(1.0, Double(detectionManager.totalImages)))
                             .progressViewStyle(LinearProgressViewStyle(tint: .green))
                             .frame(width: 100)
                     }
@@ -188,6 +192,7 @@ struct MainView: View {
                             Button("Stop", role: .destructive) {
                                 isDetecting = false
                                 detectionManager.stopDetection()
+                                detectionManager.deliverFilesFromDocuments()
                             }
                             Button("Cancel", role: .cancel) { }
                         } message: {
@@ -216,11 +221,17 @@ struct MainView: View {
             storageAvailable = getAvailableDiskSpace()
         }
         .onReceive(deliverToAzureTimer) { _ in
-            detectionManager.deliverFilesFromDocuments()
+            if !isDetecting {
+                detectionManager.deliverFilesFromDocuments()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             detectContainers = UserDefaults.standard.bool(forKey: "detectContainers")
-            print("detectContainers updated: \(detectContainers)")
+        }
+        .alert("Credential Error", isPresented: $iotManager.showingCredentialAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(iotManager.credentialAlertMessage)
         }
     }
 }

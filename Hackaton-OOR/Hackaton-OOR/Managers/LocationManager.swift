@@ -1,8 +1,12 @@
 import Foundation
 import CoreLocation
+import Logging
 
 /// A manager for handling location updates and managing location-related permissions.
 final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObject {
+    
+    /// Create a logger specific to this manager
+    private let managerLogger = Logger(label: "nl.amsterdam.cvt.hackaton-ios.LocationManager")
     
     /// Indicates whether GPS is available.
     @Published var gpsAvailable: Bool = false
@@ -53,23 +57,23 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
             
         case .restricted:
             // The user cannot change this app’s status due to restrictions (e.g., parental controls).
-            print("Location restricted")
+            managerLogger.critical("Location restricted")
             
         case .denied:
             // The user denied location access or location services are disabled.
-            print("Location denied")
+            managerLogger.critical("Location denied")
             
         case .authorizedAlways:
             // The app is authorized to use location services at all times.
-            print("Location authorizedAlways")
+            managerLogger.critical("Location authorizedAlways")
             
         case .authorizedWhenInUse:
             // The app is authorized to use location services only when in use.
-            print("Location authorized when in use")
+            managerLogger.critical("Location authorized when in use")
 
         @unknown default:
             // Handle any future cases.
-            print("Location service disabled")
+            managerLogger.critical("Location service disabled")
         }
     }
     

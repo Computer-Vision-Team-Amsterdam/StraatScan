@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		4F7B4F9F2DAD4E00004CCB35 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 4F7B4F9E2DAD4E00004CCB35 /* Logging */; };
+		4F8CA17C2DAD3CDF00113E1F /* Package.swift.bak in Sources */ = {isa = PBXBuildFile; fileRef = 4FEE99772DAD2EA5003907FF /* Package.swift.bak */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		4FF468F22D4CDFAF001733D8 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -24,6 +29,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		4FEE99772DAD2EA5003907FF /* Package.swift.bak */ = {isa = PBXFileReference; lastKnownFileType = text; path = Package.swift.bak; sourceTree = "<group>"; };
 		4FF468E12D4CDFAC001733D8 /* Hackaton-OOR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Hackaton-OOR.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FF468F12D4CDFAF001733D8 /* Hackaton-OORTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hackaton-OORTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FF468FB2D4CDFAF001733D8 /* Hackaton-OORUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hackaton-OORUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -65,6 +71,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4F7B4F9F2DAD4E00004CCB35 /* Logging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -92,6 +99,7 @@
 				4FF468F42D4CDFAF001733D8 /* Hackaton-OORTests */,
 				4FF468FE2D4CDFAF001733D8 /* Hackaton-OORUITests */,
 				4FF468E22D4CDFAC001733D8 /* Products */,
+				4FEE99772DAD2EA5003907FF /* Package.swift.bak */,
 			);
 			sourceTree = "<group>";
 		};
@@ -125,6 +133,7 @@
 			);
 			name = "Hackaton-OOR";
 			packageProductDependencies = (
+				4F7B4F9E2DAD4E00004CCB35 /* Logging */,
 			);
 			productName = "Hackaton-OOR";
 			productReference = 4FF468E12D4CDFAC001733D8 /* Hackaton-OOR.app */;
@@ -208,6 +217,9 @@
 			);
 			mainGroup = 4FF468D82D4CDFAC001733D8;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				4F7B4F9D2DAD4E00004CCB35 /* XCRemoteSwiftPackageReference "swift-log" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4FF468E22D4CDFAC001733D8 /* Products */;
 			projectDirPath = "";
@@ -249,6 +261,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4F8CA17C2DAD3CDF00113E1F /* Package.swift.bak in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -427,7 +440,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "nl.amsterdam.cvt.hackaton-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "nl.amsterdam.cvt.hackaton-ios.sdavrieux";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -461,7 +474,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "nl.amsterdam.cvt.hackaton-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "nl.amsterdam.cvt.hackaton-ios.sdavrieux";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -577,6 +590,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		4F7B4F9D2DAD4E00004CCB35 /* XCRemoteSwiftPackageReference "swift-log" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-log.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.6.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4F7B4F9E2DAD4E00004CCB35 /* Logging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4F7B4F9D2DAD4E00004CCB35 /* XCRemoteSwiftPackageReference "swift-log" */;
+			productName = Logging;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 4FF468D92D4CDFAC001733D8 /* Project object */;
 }
