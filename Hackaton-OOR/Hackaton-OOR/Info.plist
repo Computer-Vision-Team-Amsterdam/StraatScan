@@ -59,9 +59,17 @@
 	<string>$(DEVICE_ID)</string>
 	<key>DEVICE_SAS_TOKEN</key>
 	<string>$(DEVICE_SAS_TOKEN)</string>
-	<key>ConfidenceThreshold</key>
+	<key>ContainerConfidenceThreshold</key>
 	<string>0.25</string>
-	<key>IoUThreshold</key>
+	<key>ContainerIoUThreshold</key>
+	<string>0.45</string>
+	<key>MobileToiletConfidenceThreshold</key>
+	<string>0.25</string>
+	<key>MobileToiletIoUThreshold</key>
+	<string>0.45</string>
+	<key>ScaffoldingConfidenceThreshold</key>
+	<string>0.25</string>
+	<key>ScaffoldingIoUThreshold</key>
 	<string>0.45</string>
 	<key>IoTHubHost</key>
 	<string>iothub-oor-ont-weu-itr-01.azure-devices.net</string>
