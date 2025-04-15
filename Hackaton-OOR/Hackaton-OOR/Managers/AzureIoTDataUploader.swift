@@ -158,7 +158,7 @@ class AzureIoTDataUploader {
         }
         
         logger.trace("Sending file upload request...")
-        let (data, response) = try await performRequest(request: request, description: "file upload request")
+        let (data, _) = try await performRequest(request: request, description: "file upload request")
 
         do {
             let decoder = JSONDecoder()

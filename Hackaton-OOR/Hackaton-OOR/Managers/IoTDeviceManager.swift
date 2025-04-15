@@ -44,8 +44,6 @@ class IoTDeviceManager: ObservableObject {
             return
         }
 
-        var overallSuccess = true
-
         managerLogger.debug("Processing Device ID credential...")
         if let deviceIdError = checkAndProcessCredential(
             key: deviceIdKey,
@@ -54,7 +52,6 @@ class IoTDeviceManager: ObservableObject {
         ) {
             managerLogger.critical("Device ID setup failed: \(deviceIdError)")
             notifyUserOfCredentialError(message: deviceIdError + ". Please contact support.")
-            overallSuccess = false
             return
         }
 
@@ -66,15 +63,9 @@ class IoTDeviceManager: ObservableObject {
         ) {
             managerLogger.critical("SAS Token setup failed: \(sasTokenError)")
             notifyUserOfCredentialError(message: sasTokenError + ". Please contact support.")
-            overallSuccess = false
             return
         }
-
-        if overallSuccess {
-            managerLogger.info("Device credentials setup check completed successfully.")
-        } else {
-             managerLogger.warning("Device credentials setup check completed with errors.")
-        }
+        managerLogger.info("Device credentials setup check completed successfully.")
     }
 
     /// Safely retrieves the application's Info.plist as a dictionary.

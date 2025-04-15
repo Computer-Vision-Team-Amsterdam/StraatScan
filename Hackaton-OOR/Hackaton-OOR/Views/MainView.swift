@@ -33,6 +33,11 @@ struct MainView: View {
     @State private var isDetecting: Bool = false
     @State private var showingStopConfirmation = false
     
+    private var isLocationAuthorized: Bool {
+        // Accesses the authorizationStatus published by the locationManager instance
+        locationManager.authorizationStatus == .authorizedWhenInUse || locationManager.authorizationStatus == .authorizedAlways
+    }
+    
     // Timer to check storage periodically
     let storageTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect()
     // Timer to attempt uploading stored files periodically (e.g., every 5 minutes)
@@ -73,12 +78,13 @@ struct MainView: View {
                     .foregroundColor(.clear)
             }
             
-            // GPS Status
+            // GPS Active
             HStack {
-                Text("GPS")
+                Text("GPS Active")
                 Spacer()
-                Text(locationManager.gpsAvailable ? "ON" : "OFF")
-                    .foregroundColor(locationManager.gpsAvailable ? .green : .red)
+                let isActive = locationManager.isReceivingLocationUpdates
+                Text(isActive ? "ACTIVE" : "INACTIVE")
+                    .foregroundColor(isActive ? .green : .red)
             }
             
             Divider()
@@ -200,13 +206,16 @@ struct MainView: View {
                         }
                         
                         Button(action: {
+                            if !isLocationAuthorized {
+                                locationManager.requestAuthorization()
+                            }
                             isDetecting = true
                             detectionManager.startDetection()
                         }) {
                             Text("Detect")
                         }
                         .buttonStyle(DetectButtonStyle())
-                        .disabled(isDetecting || !locationManager.gpsAvailable)
+                        .disabled(isDetecting)
                     }
                     .frame(maxWidth: .infinity)
                 }

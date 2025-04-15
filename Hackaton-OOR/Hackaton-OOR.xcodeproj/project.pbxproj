@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		4F7B4F9F2DAD4E00004CCB35 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 4F7B4F9E2DAD4E00004CCB35 /* Logging */; };
-		4F8CA17C2DAD3CDF00113E1F /* Package.swift.bak in Sources */ = {isa = PBXBuildFile; fileRef = 4FEE99772DAD2EA5003907FF /* Package.swift.bak */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -29,7 +28,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		4FEE99772DAD2EA5003907FF /* Package.swift.bak */ = {isa = PBXFileReference; lastKnownFileType = text; path = Package.swift.bak; sourceTree = "<group>"; };
 		4FF468E12D4CDFAC001733D8 /* Hackaton-OOR.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Hackaton-OOR.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FF468F12D4CDFAF001733D8 /* Hackaton-OORTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hackaton-OORTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FF468FB2D4CDFAF001733D8 /* Hackaton-OORUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hackaton-OORUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -99,7 +97,6 @@
 				4FF468F42D4CDFAF001733D8 /* Hackaton-OORTests */,
 				4FF468FE2D4CDFAF001733D8 /* Hackaton-OORUITests */,
 				4FF468E22D4CDFAC001733D8 /* Products */,
-				4FEE99772DAD2EA5003907FF /* Package.swift.bak */,
 			);
 			sourceTree = "<group>";
 		};
@@ -261,7 +258,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4F8CA17C2DAD3CDF00113E1F /* Package.swift.bak in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

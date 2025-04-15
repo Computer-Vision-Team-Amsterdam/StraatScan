@@ -409,10 +409,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             }
         }
 
-        var metadata: [String: Any] = [
-            "date": dateString, // Use the consistent dateString
+        let metadata: [String: Any] = [
+            "date": dateString,
             "predictions": predictionsMetadata,
-            // Include location data safely
             "latitude": locationManager.lastKnownLocation?.latitude as Any? ?? "",
             "longitude": locationManager.lastKnownLocation?.longitude as Any? ?? "",
             "image_timestamp": self.lastPixelBufferTimestamp as Any? ?? "",
