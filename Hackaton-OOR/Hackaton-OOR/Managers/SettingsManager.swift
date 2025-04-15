@@ -49,6 +49,12 @@ class ThresholdProvider: MLFeatureProvider {
         return nil
     }
 
+    /// Validates and retrieves a threshold value from UserDefaults.
+    /// - Parameters:
+    ///   - key: The key for the threshold value in UserDefaults.
+    ///   - defaultValue: The default value to return if the stored value is invalid.
+    /// - Returns: The validated threshold value.
+    /// - Note: The value must be between 0.01 and 1.0, inclusive.
     static func getValidatedThreshold(forKey key: String, defaultValue: Double) -> Double {
         if let thresholdString = UserDefaults.standard.string(forKey: key),
            let value = Double(thresholdString) {
@@ -59,6 +65,9 @@ class ThresholdProvider: MLFeatureProvider {
         return defaultValue
     }
 
+    /// Initializes the `ThresholdProvider` with default threshold values.
+    /// The default values are set for "container", "mobile toilet", and "scaffolding".
+    /// The default values are 0.45 for IoU and 0.25 for confidence.
     init() {
         let containerIoU = ThresholdProvider.getValidatedThreshold(forKey: "iouThreshold_container", defaultValue: 0.45)
         let containerConfidence = ThresholdProvider.getValidatedThreshold(forKey: "confidenceThreshold_container", defaultValue: 0.25)

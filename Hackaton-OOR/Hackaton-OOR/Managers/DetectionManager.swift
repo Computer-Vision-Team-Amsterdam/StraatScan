@@ -35,7 +35,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// Handles data uploads to Azure IoT Hub.
     private var uploader: AzureIoTDataUploader?
     
-    // Keep track of the last known user default values
+    // The last known thresholds for object detection.
     private var lastThresholds: [String: (iou: Double, confidence: Double)] = [
         "container": (iou: 0.45, confidence: 0.25),
         "mobile toilet": (iou: 0.45, confidence: 0.25),
