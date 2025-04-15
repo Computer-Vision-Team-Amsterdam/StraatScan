@@ -229,13 +229,15 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                             image = imageWithBlackBoxes
                         }
 
-                        let colors: [String: UIColor] = [
-                        "container": .red,
-                        "mobile toilet": .blue,
-                        "scaffolding": .green
-                        ]
-
-                        image = self.drawSquaresAroundDetectedAreas(in: image, boxesPerObject: detectedBoxes, colors: colors)
+                        // If drawing bounding boxes is enabled, draw them on the image.
+                        if UserDefaults.standard.bool(forKey: "drawBoundingBoxes") {
+                            let colors: [String: UIColor] = [
+                                "container": .red,
+                                "mobile toilet": .blue,
+                                "scaffolding": .green
+                            ]
+                            image = self.drawSquaresAroundDetectedAreas(in: image, boxesPerObject: detectedBoxes, colors: colors)
+                        }
                         self.deliverDetectionToAzure(image: image, predictions: results)
                         self.lastPixelBufferForSaving = nil
                     }
