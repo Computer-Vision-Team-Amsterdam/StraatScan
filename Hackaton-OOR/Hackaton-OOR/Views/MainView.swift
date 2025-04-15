@@ -1,6 +1,7 @@
 import SwiftUI
 import CoreLocation
 import Network
+import AVFoundation
 
 func getAvailableDiskSpace() -> Int {
     let fileURL = URL(fileURLWithPath: NSHomeDirectory())
@@ -34,6 +35,9 @@ struct MainView: View {
     @State private var imagesDelivered: Double = 0
     @State private var imagesToDeliver: Double = 10 // for simulation; replace with your actual value
     @State private var showingStopConfirmation = false
+    @State private var showCameraView: Bool = false
+    @State private var isCameraAuthorized: Bool = false
+    @State private var showCameraAccessDeniedAlert: Bool = false
 
     private var enabledObjects: String {
         var objects = [String]()
@@ -66,7 +70,7 @@ struct MainView: View {
                     VStack(spacing: 16) {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-                            .scaleEffect(2.0) // Increase the size of the circular indicator.
+                            .scaleEffect(1.5) // Increase the size of the circular indicator.
                         Text("Detecting...")
                             .font(.title3)
                             .fontWeight(.bold)
@@ -82,6 +86,30 @@ struct MainView: View {
                     .frame(height: 90)
                     .foregroundColor(.clear)
             }
+            
+            HStack {
+                Text("Camera Preview")
+                Spacer()
+                Button(action: {
+                    CameraManager.checkAndRequestCameraAccess { authorized in
+                        isCameraAuthorized = authorized
+                        if authorized {
+                            showCameraView = true
+                        } else {
+                            showCameraAccessDeniedAlert = true
+                        }
+                    }
+                }) {
+                    Image(systemName: "camera.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 24, height: 24)
+                        .foregroundColor(isDetecting ? Color.gray : Color.blue)
+                }
+                .disabled(isDetecting)
+            }
+            
+            Divider()
             
             // GPS Status
             HStack {
@@ -123,9 +151,8 @@ struct MainView: View {
                 Text("\(storageAvailable)GB")
                     .foregroundColor(.green)
             }
-            
+        
             Divider()
-            Spacer()
             
             ZStack(alignment: .bottom){
                 VStack(alignment: .leading, spacing: 20) {
@@ -209,8 +236,15 @@ struct MainView: View {
                         }
                         
                         Button(action: {
-                            isDetecting = true
-                            detectionManager.startDetection()
+                            CameraManager.checkAndRequestCameraAccess { authorized in
+                                isCameraAuthorized = authorized
+                                if authorized {
+                                    isDetecting = true
+                                    detectionManager.startDetection()
+                                } else {
+                                    showCameraAccessDeniedAlert = true
+                                }
+                            }
                         }) {
                             Text("Detect")
                         }
@@ -225,6 +259,9 @@ struct MainView: View {
         .onAppear {
             storageAvailable = getAvailableDiskSpace()
             detectionManager.deliverFilesFromDocuments()
+            CameraManager.checkAndRequestCameraAccess { authorized in
+                isCameraAuthorized = authorized
+            }
             // TODO: To remove later
             print("detectContainers = \(UserDefaults.standard.bool(forKey: "detectContainers"))")
             print("detectMobileToilets = \(UserDefaults.standard.bool(forKey: "detectMobileToilets"))")
@@ -236,6 +273,12 @@ struct MainView: View {
         }
         .onReceive(deliverToAzureTimer) { _ in
             detectionManager.deliverFilesFromDocuments()
+        }
+        .fullScreenCover(isPresented: $showCameraView) {
+            CameraViewContainer(isCameraPresented: $showCameraView)
+        }
+        .alert(isPresented: $showCameraAccessDeniedAlert) {
+            CameraManager.showCameraAccessDeniedAlert()
         }
     }
 }
