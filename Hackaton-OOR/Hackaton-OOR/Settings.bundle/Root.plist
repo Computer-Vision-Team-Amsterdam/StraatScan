@@ -36,66 +36,6 @@
 			<key>DefaultValue</key>
 			<true/>
 		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>IoU Threshold (Container)</string>
-			<key>Key</key>
-			<string>iouThreshold_container</string>
-			<key>DefaultValue</key>
-			<string>0.45</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>Confidence Threshold (Container)</string>
-			<key>Key</key>
-			<string>confidenceThreshold_container</string>
-			<key>DefaultValue</key>
-			<string>0.25</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>IoU Threshold (Mobile Toilets)</string>
-			<key>Key</key>
-			<string>iouThreshold_mobiletoilet</string>
-			<key>DefaultValue</key>
-			<string>0.45</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>Confidence Threshold (Mobile Toilets)</string>
-			<key>Key</key>
-			<string>confidenceThreshold_mobiletoilet</string>
-			<key>DefaultValue</key>
-			<string>0.25</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>IoU Threshold (Scaffolding)</string>
-			<key>Key</key>
-			<string>iouThreshold_scaffolding</string>
-			<key>DefaultValue</key>
-			<string>0.45</string>
-		</dict>
-		<dict>
-			<key>Type</key>
-			<string>PSTextFieldSpecifier</string>
-			<key>Title</key>
-			<string>Confidence Threshold (Scaffolding)</string>
-			<key>Key</key>
-			<string>confidenceThreshold_scaffolding</string>
-			<key>DefaultValue</key>
-			<string>0.25</string>
-		</dict>
 	</array>
 </dict>
 </plist>

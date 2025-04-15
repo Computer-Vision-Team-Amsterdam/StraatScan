@@ -35,13 +35,6 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// Handles data uploads to Azure IoT Hub.
     private var uploader: AzureIoTDataUploader?
     
-    // The last known thresholds for object detection.
-    private var lastThresholds: [String: (iou: Double, confidence: Double)] = [
-        "container": (iou: 0.45, confidence: 0.25),
-        "mobile toilet": (iou: 0.45, confidence: 0.25),
-        "scaffolding": (iou: 0.45, confidence: 0.25)
-    ]
-    
     /// The Azure IoT Hub host URL.
     private let iotHubHost: String
     
@@ -68,11 +61,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     
     /// Initializes the DetectionManager, loading the YOLO model and setting up video capture.
     override init() {
-        // Fetch values from Info.plist
-        let infoDict = Bundle.main.infoDictionary
-        self.lastConfidenceThreshold = Double(infoDict?["ConfidenceThreshold"] as? String ?? "0.25") ?? 0.25
-        self.lastIoUThreshold = Double(infoDict?["IoUThreshold"] as? String ?? "0.45") ?? 0.45
-        self.iotHubHost = infoDict?["IoTHubHost"] as? String ?? "iothub-oor-ont-weu-itr-01.azure-devices.net"
+        // Use centralized configuration from AppConfiguration.
+        let config = AppConfiguration.shared
+        self.iotHubHost = config.iothubHost
         
         super.init()
         self.uploader = AzureIoTDataUploader(host: self.iotHubHost)
@@ -86,7 +77,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             let loadedModel = try yolov8m(configuration: modelConfig).model
             self.mlModel = loadedModel
             let vnModel = try VNCoreMLModel(for: loadedModel)
-            vnModel.featureProvider = ThresholdManager.shared.getThresholdProvider()
+            vnModel.featureProvider = config.staticThresholdProvider
             self.detector = vnModel
         } catch {
             print("Error loading model: \(error)")
@@ -128,7 +119,6 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             }
             return
         }
-        updateThresholdsIfNeeded()
         videoCapture?.start()
         print("Detection started.")
         detectionTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -145,36 +135,6 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         print("Detection stopped.")
         detectionTimer?.invalidate()
         detectionTimer = nil
-    }
-  
-    // MARK: - Private Methods
-    
-    /// Updates the detection thresholds if they have been adjusted.
-    private func updateThresholdsIfNeeded() {
-        let newThresholdProvider = ThresholdManager.shared.getThresholdProvider()
-        let newThresholds = newThresholdProvider.thresholds
-        print("Updating thresholds with per-class values.")
-        
-        var hasChanged = false
-        for (objectName, newValues) in newThresholds {
-            if let oldValues = lastThresholds[objectName] {
-                if oldValues.iou != newValues.iou || oldValues.confidence != newValues.confidence {
-                    hasChanged = true
-                    break
-                }
-            } else {
-                hasChanged = true
-                break
-            }
-        }
-        
-        if hasChanged {
-            print("Threshold changes detected. New thresholds: \(newThresholds)")
-            detector?.featureProvider = newThresholdProvider
-            lastThresholds = newThresholds
-        } else {
-            print("No changes in thresholds.")
-        }
     }
     
     // MARK: - VideoCaptureDelegate
