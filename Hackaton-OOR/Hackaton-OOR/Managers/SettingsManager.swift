@@ -1,27 +1,27 @@
-//
-//  ThresholdManager.swift
-//  Hackaton-OOR
-//
-//  Created by Niek IJzerman on 05/02/2025.
-//
-
 import Foundation
 import CoreML
 
+/// A singleton manager for handling threshold settings used in object detection.
 class ThresholdManager {
     
+    /// The shared instance of the `ThresholdManager`.
     static let shared = ThresholdManager()
     
+    /// Private initializer to enforce singleton usage.
     private init() {}
 
+    /// Retrieves a `ThresholdProvider` instance with the current threshold settings.
+    /// - Returns: A `ThresholdProvider` configured with the current thresholds.
     func getThresholdProvider() -> ThresholdProvider {
         return ThresholdProvider()
     }
 }
 
+/// A provider for threshold values used in object detection models.
 class ThresholdProvider: MLFeatureProvider {
     var thresholds: [String: (iou: Double, confidence: Double)]
 
+    /// The set of feature names provided by this provider.
     var featureNames: Set<String> {
         var names = Set<String>()
         for key in thresholds.keys {
@@ -31,6 +31,9 @@ class ThresholdProvider: MLFeatureProvider {
         return names
     }
 
+    /// Retrieves the feature value for a given feature name.
+    /// - Parameter featureName: The name of the feature.
+    /// - Returns: The feature value, or `nil` if the feature name is not recognized.
     func featureValue(for featureName: String) -> MLFeatureValue? {
         // Expected format: "<object>_iouThreshold" or "<object>_confidenceThreshold"
         let components = featureName.split(separator: "_")
