@@ -58,123 +58,30 @@ struct MainView: View {
     }
     
     var body: some View {
-        // VStack(alignment: .leading, spacing: 20) {
-        //     if isDetecting {
-        //         HStack {
-        //             Spacer()
-        //             VStack(spacing: 16) {
-        //                 ProgressView()
-        //                     .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-        //                     .scaleEffect(1.5) // Increase the size of the circular indicator.
-        //                 Text("Detecting...")
-        //                     .font(.title3)
-        //                     .fontWeight(.bold)
-        //                     .foregroundColor(.blue)
-        //                     .multilineTextAlignment(.center)
-        //             }
-        //             .padding()
-        //             Spacer()
-        //         }
-        //     } else {
-        //         // Placeholder to maintain layout when not detecting.
-        //         Rectangle()
-        //             .frame(height: 90)
-        //             .foregroundColor(.clear)
-        //     }
-            
-        //     HStack {
-        //         Text("Camera Preview")
-        //         Spacer()
-        //         Button(action: {
-        //             CameraManager.checkAndRequestCameraAccess { authorized in
-        //                 isCameraAuthorized = authorized
-        //                 if authorized {
-        //                     showCameraView = true
-        //                 } else {
-        //                     showCameraAccessDeniedAlert = true
-        //                 }
-        //             }
-        //         }) {
-        //             Image(systemName: "camera.fill")
-        //                 .resizable()
-        //                 .scaledToFit()
-        //                 .frame(width: 24, height: 24)
-        //                 .foregroundColor(isDetecting ? Color.gray : Color.blue)
-        //         }
-        //         .disabled(isDetecting)
-        //     }
-            
-        //     Divider()
-            
-        //     // GPS Status
-        //     HStack {
-        //         Text("GPS")
-        //         Spacer()
-        //         Text(locationManager.gpsAvailable ? "ON" : "OFF")
-        //             .foregroundColor(locationManager.gpsAvailable ? .green : .red)
-        //     }
-            
-        //     Divider()
-            
-        //     // GPS Accuracy
-        //     HStack {
-        //         Text("GPS accuracy (m)")
-        //         Spacer()
-        //         if let accuracy = locationManager.lastAccuracy {
-        //             Text(String(format: "%.2f", accuracy)).foregroundColor(.green)
-        //         } else {
-        //             Text("N/A").foregroundColor(.red)
-        //         }
-        //     }
-            
-        //     Divider()
-            
-        //     // Internet Connection
-        //     HStack {
-        //         Text("Internet connection")
-        //         Spacer()
-        //         Text(networkMonitor.internetAvailable ? "ON" : "OFF")
-        //             .foregroundColor(networkMonitor.internetAvailable ? .green : .red)
-        //     }
-            
-        //     Divider()
-            
-        //     // Storage Available
-        //     HStack {
-        //         Text("Storage available")
-        //         Spacer()
-        //         Text("\(storageAvailable)GB")
-        //             .foregroundColor(.green)
-        //     }
-        
-        //     Divider()
-            
-        //     ZStack(alignment: .bottom){
         GeometryReader { geometry in
             // Portrait mode
             if geometry.size.width <= geometry.size.height {
                 VStack(alignment: .leading, spacing: 20) {
-                    if isDetecting {
-                        HStack {
-                            Spacer()
-                            VStack(spacing: 16) {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-                                    .scaleEffect(1.5) // Increase the size of the circular indicator.
-                                Text("Detecting...")
-                                    .font(.title3)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.blue)
-                                    .multilineTextAlignment(.center)
+                    ZStack {
+                        // Reserve the layout with a transparent placeholder.
+                        Color.clear.frame(height: 30)
+                        
+                        if isDetecting {
+                            HStack {
+                                Spacer()
+                                HStack(spacing: 8) {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                                        .scaleEffect(1.5)
+                                    Text("Detecting...")
+                                        .font(.title3)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.blue)
+                                        .multilineTextAlignment(.center)
+                                }
+                                Spacer()
                             }
-                            .padding()
-                            Spacer()
                         }
-                    } else {
-                        // Placeholder to maintain layout when not detecting.
-                        Rectangle()
-                            .frame(height: 90)
-                            .foregroundColor(.clear)
                     }
 
                     HStack {
@@ -199,6 +106,8 @@ struct MainView: View {
                         .disabled(isDetecting)
                     }
                     
+                    Divider()
+                    
                     // GPS Status
                     infoRow(label: "GPS",
                             value: locationManager.gpsAvailable ? "ON" : "OFF",
@@ -206,7 +115,7 @@ struct MainView: View {
                     
                     Divider()
                     
-                    // GPS Accuray
+                    // GPS Accuracy
                     infoRow(label: "GPS accuracy (m)",
                             value: locationManager.lastAccuracy.map { String(format: "%.2f", $0) } ?? "N/A",
                             valueColor: locationManager.lastAccuracy != nil ? .green : .red)
@@ -338,6 +247,8 @@ struct MainView: View {
                             }
                             .disabled(isDetecting)
                         }
+                        
+                        Divider()
 
                         infoRow(label: "GPS",
                                 value: locationManager.gpsAvailable ? "ON" : "OFF",
@@ -366,8 +277,6 @@ struct MainView: View {
                         infoRow(label: "Detect containers",
                                 value: detectContainers ? "ON" : "OFF",
                                 valueColor: detectContainers ? .green : .red)
-                        
-                        Spacer()
                         
                         HStack {
                             Spacer()
@@ -423,17 +332,30 @@ struct MainView: View {
                                 .frame(width: 100)
                         }
                         
-                        Spacer()
+                        Divider()
+                        
+                        // Empty row to align infoRows across columns
+                        infoRow(label: " ",
+                                value: " ")
                         
                         Button(action: {
                             if !isDetecting {
-                                isDetecting = true
-                                detectionManager.startDetection()
+                                CameraManager.checkAndRequestCameraAccess { authorized in
+                                    isCameraAuthorized = authorized
+                                    if authorized {
+                                        DispatchQueue.main.async {
+                                            isDetecting = true
+                                            detectionManager.startDetection()
+                                        }
+                                    } else {
+                                        showCameraAccessDeniedAlert = true
+                                    }
+                                }
                             }
                         }) {
                             if isDetecting {
-                                HStack {
-                                    Text("Detecting   ")
+                                HStack(spacing: 8) {
+                                    Text("Detecting")
                                     ProgressView()
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                         .scaleEffect(1.5)
@@ -445,7 +367,6 @@ struct MainView: View {
                         .buttonStyle(DetectButtonStyle())
                         .disabled(isDetecting || !locationManager.gpsAvailable)
                     }
-                    .padding()
                 }
                 .padding()
             }
