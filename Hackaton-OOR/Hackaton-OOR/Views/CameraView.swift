@@ -1,113 +1,102 @@
 import SwiftUI
+import UIKit
 import AVFoundation
 import Logging
 
-/// A SwiftUI view that displays a live camera preview using the VideoCapture class.
-struct CameraView: View {
-    // Use an ObservableObject wrapper to manage the VideoCapture instance.
-    @StateObject private var cameraManager = CameraManager()
+// MARK: - Camera View Container with Exit Button
+struct CameraViewContainer: View {
+    @Binding var isCameraPresented: Bool
     
     var body: some View {
-        ZStack {
-            // CameraPreview will wrap a UIView that shows the video preview.
-            CameraPreview(videoCapture: cameraManager.videoCapture)
-                .ignoresSafeArea()
-            
-            // (Optional) Add any overlay UI controls here
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        // Example action: stop the camera preview.
-                        cameraManager.stopCapture()
-                    }) {
-                        Image(systemName: "stop.circle.fill")
-                            .resizable()
-                            .frame(width: 60, height: 60)
-                            .foregroundColor(.red)
-                            .padding()
-                    }
-                }
+        ZStack(alignment: .topTrailing) {
+            CameraPreviewRepresentable()
+                .edgesIgnoringSafeArea(.all)
+            Button {
+                isCameraPresented = false
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .resizable()
+                    .frame(width: 40, height: 40)
+                    .foregroundColor(.white)
+                    .padding()
             }
-        }
-        .onAppear {
-            cameraManager.startCapture()
-        }
-        .onDisappear {
-            cameraManager.stopCapture()
         }
     }
 }
 
-/// A UIViewRepresentable that hosts the camera’s preview layer.
-struct CameraPreview: UIViewRepresentable {
-    /// Create a logger specific to this manager
-    private let managerLogger = Logger(label: "nl.amsterdam.cvt.hackaton-ios.CameraPreview")
+// MARK: - CameraPreviewRepresentable for the Camera Preview
+struct CameraPreviewRepresentable: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> CameraPreviewController {
+        CameraPreviewController()
+    }
     
-    let videoCapture: VideoCapture
-    
-    func makeUIView(context: Context) -> UIView {
-        // Create a plain UIView that will contain the camera preview.
-        let view = UIView(frame: .zero)
+    func updateUIViewController(_ uiViewController: CameraPreviewController, context: Context) {}
+}
+
+// MARK: - UIKit Camera Preview Controller
+class CameraPreviewController: UIViewController {
+    var captureSession: AVCaptureSession!
+    var videoPreviewLayer: AVCaptureVideoPreviewLayer!
+    private let logger = Logger(label: "nl.amsterdam.cvt.hackaton-ios.CameraPreviewController")
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
         view.backgroundColor = .black
+
+        // Set up the capture session.
+        captureSession = AVCaptureSession()
+        captureSession.sessionPreset = .high
         
-        // Set up the camera. The VideoCapture setUp method runs on a background queue.
-        videoCapture.setUp { success in
-            if success {
-                DispatchQueue.main.async {
-                    // Once setup is complete, ensure that the previewLayer is sized correctly.
-                    if let previewLayer = videoCapture.previewLayer {
-                        previewLayer.frame = view.bounds
-                        previewLayer.videoGravity = .resizeAspectFill
-                        // Add the preview layer to the view's layer hierarchy.
-                        view.layer.insertSublayer(previewLayer, at: 0)
-                    }
-                }
-            } else {
-                self.managerLogger.critical("Failed to set up camera.")
-            }
+        guard let videoDevice = AVCaptureDevice.default(for: .video),
+              let videoInput = try? AVCaptureDeviceInput(device: videoDevice),
+              captureSession.canAddInput(videoInput) else {
+            logger.error("Failed to get video device input.")
+            CameraManager.presentVideoInputErrorAlert(on: self)
+            return
         }
-        return view
+        captureSession.addInput(videoInput)
+        
+        // Set up the preview layer.
+        videoPreviewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
+        videoPreviewLayer.videoGravity = .resizeAspectFill
+        view.layer.addSublayer(videoPreviewLayer)
+        
+        // Start running the session asynchronously.
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            self.captureSession.startRunning()
+        }
     }
     
-    func updateUIView(_ uiView: UIView, context: Context) {
-        // Update the preview layer's frame if the view’s size changes.
-        if let previewLayer = videoCapture.previewLayer {
-            previewLayer.frame = uiView.bounds
-        }
-        // Also update the video orientation when the view updates.
-        videoCapture.updateVideoOrientation()
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        videoPreviewLayer.frame = view.bounds
+        updateVideoOrientation()
     }
-}
 
-/// An ObservableObject wrapper that manages the VideoCapture instance.
-final class CameraManager: ObservableObject {
-    /// Create a logger specific to this manager
-    private let managerLogger = Logger(label: "nl.amsterdam.cvt.hackaton-ios.CameraManager")
-    
-    let videoCapture = VideoCapture()
-    
-    /// Starts the camera capture session.
-    func startCapture() {
-        // Ensure the camera is set up before starting.
-        videoCapture.setUp { success in
-            if success {
-                self.videoCapture.start()
-            } else {
-                self.managerLogger.critical("Camera setup failed.")
-            }
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        coordinator.animate { _ in
+            self.videoPreviewLayer.frame = self.view.bounds
+            self.updateVideoOrientation()
         }
     }
     
-    /// Stops the camera capture session.
-    func stopCapture() {
-        videoCapture.stop()
-    }
-}
-
-struct CameraView_Previews: PreviewProvider {
-    static var previews: some View {
-        CameraView()
+    private func updateVideoOrientation() {
+        guard let connection = videoPreviewLayer.connection else { return }
+        
+        let orientation = UIDevice.current.orientation
+        
+        switch orientation {
+        case .portrait:
+            connection.videoRotationAngle = 90
+        case .portraitUpsideDown:
+            connection.videoRotationAngle = 270
+        case .landscapeLeft:
+            connection.videoRotationAngle = 0
+        case .landscapeRight:
+            connection.videoRotationAngle = 180
+        default:
+            connection.videoRotationAngle = 90
+        }
     }
 }
