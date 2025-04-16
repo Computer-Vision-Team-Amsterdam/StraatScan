@@ -31,11 +31,8 @@ Follow these steps to set up the project for development:
     b.  **Device Connection String:** Navigate to your IoT Hub in the Azure Portal, go to "Devices", select your target device, and find its "Primary Connection String" (or Secondary). You'll need this to generate the SAS token. **Do not put the connection string itself in the secrets file.**
 
     c.  **Get Azure Credentials:**
-
         * **Device ID (`DEVICE_ID`):** Find the ID of the registered device within your Azure IoT Hub instance in the Azure Portal.
-
         * **Device Connection String:** Navigate to your IoT Hub in the Azure Portal, go to "Devices", select your target device, and find its "Primary Connection String" (or Secondary). You'll need this to generate the SAS token. **Do not put the connection string itself in the secrets file.**
-
         * **Generate SAS Token (`DEVICE_SAS_TOKEN`):**
             1.  Open your terminal or command prompt.
             2.  Make sure you have Azure CLI installed and are logged in (`az login`).
@@ -53,7 +50,7 @@ Follow these steps to set up the project for development:
         DEVICE_ID = Your_Device_ID_Here
         DEVICE_SAS_TOKEN = Your_Generated_SAS_Token_Here
         ```
-
+        
     e.  *(Project Configuration Note: The project should already be configured to use `Debug.xcconfig` and `Release.xcconfig`, which in turn `#include "Secrets.xcconfig"` to load these values at build time and inject them into the `Info.plist`.)*
 
 3.  **Build & Run:**
