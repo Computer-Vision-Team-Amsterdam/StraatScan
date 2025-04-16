@@ -26,7 +26,9 @@ cd Hackaton-OOR
 This project uses `.xcconfig` files to manage build-time secrets like the Azure IoT Hub Device ID and SAS Token, keeping them out of source control. You need to create a `Secrets.xcconfig` file.
 
 a.  **Create the File:** In the root directory of the project (where your `.xcodeproj` file is), create a new file named `Secrets.xcconfig`.
+
 b.  **Device Connection String:** Navigate to your IoT Hub in the Azure Portal, go to "Devices", select your target device, and find its "Primary Connection String" (or Secondary). You'll need this to generate the SAS token. **Do not put the connection string itself in the secrets file.**
+
 c.  **Get Azure Credentials:**
 * **Device ID (`DEVICE_ID`):** Find the ID of the registered device within your Azure IoT Hub instance in the Azure Portal.
 * **Device Connection String:** Navigate to your IoT Hub in the Azure Portal, go to "Devices", select your target device, and find its "Primary Connection String" (or Secondary). You'll need this to generate the SAS token. **Do not put the connection string itself in the secrets file.**
