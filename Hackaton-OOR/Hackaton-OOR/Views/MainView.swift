@@ -262,6 +262,9 @@ struct MainView: View {
             CameraManager.checkAndRequestCameraAccess { authorized in
                 isCameraAuthorized = authorized
             }
+            if !isLocationAuthorized {
+                locationManager.requestAuthorization()
+            }
         }
         .onReceive(storageTimer) { _ in
             storageAvailable = getAvailableDiskSpace()
