@@ -17,6 +17,92 @@ func getAvailableDiskSpace() -> Int {
     return 0
 }
 
+/// A struct to create a UI row entry with a label and a value.
+struct infoRow: View {
+    let label: String
+    let value: String
+    var valueColor: Color = .gray
+
+    var body: some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Text(value).foregroundColor(valueColor)
+        }
+    }
+}
+
+/// A struct for the status information column that is shown in portrait and landscape.
+struct StatusRows: View {
+    @ObservedObject var locationManager: LocationManager
+    @ObservedObject var networkMonitor: NetworkMonitor
+    let storageAvailable: Int
+    let detectContainers: Bool
+
+    var body: some View {
+        Group {
+            infoRow(label: "GPS",
+                    value: locationManager.gpsAvailable ? "ON" : "OFF",
+                    valueColor: locationManager.gpsAvailable ? .green : .red)
+            Divider()
+
+            infoRow(label: "GPS accuracy (m)",
+                    value: locationManager.lastAccuracy.map { String(format: "%.2f", $0) } ?? "N/A",
+                    valueColor: locationManager.lastAccuracy != nil ? .green : .red)
+            Divider()
+
+            infoRow(label: "Internet connection",
+                    value: networkMonitor.internetAvailable ? "ON" : "OFF",
+                    valueColor: networkMonitor.internetAvailable ? .green : .red)
+            Divider()
+
+            infoRow(label: "Storage available",
+                    value: "\(storageAvailable) GB",
+                    valueColor: .green)
+            Divider()
+
+            infoRow(label: "Detect containers",
+                    value: detectContainers ? "ON" : "OFF",
+                    valueColor: detectContainers ? .green : .red)
+        }
+    }
+}
+
+/// A struct for the detection-related information column that is shown in portrait and landscape mode.
+struct DetectionStatsRows: View {
+    @ObservedObject var detectionManager: DetectionManager
+    let formattedTime: String
+
+    var body: some View {
+        Group {
+            infoRow(label: "Recorded hours",
+                    value: formattedTime)
+            Divider()
+
+            infoRow(label: "Total images",
+                    value: "\(detectionManager.totalImages)")
+            Divider()
+
+            infoRow(label: "Objects detected",
+                    value: "\(detectionManager.objectsDetected)")
+            Divider()
+
+            infoRow(label: "Images delivered",
+                    value: "\(detectionManager.imagesDelivered)")
+            Divider()
+
+            HStack {
+                Text("Delivery progress")
+                Spacer()
+                ProgressView(value: Double(detectionManager.imagesDelivered),
+                             total: Double(max(detectionManager.totalImages, 1)))
+                    .progressViewStyle(LinearProgressViewStyle(tint: .green))
+                    .frame(width: 100)
+            }
+        }
+    }
+}
+
 struct MainView: View {
     @StateObject private var locationManager = LocationManager()
     @StateObject private var networkMonitor = NetworkMonitor()
@@ -47,328 +133,14 @@ struct MainView: View {
         formatter.zeroFormattingBehavior = [.pad]
         return formatter.string(from: TimeInterval(totalSeconds)) ?? "00:00"
     }
-    // A helper function to create a UI row entry with a label and a value.
-    private func infoRow(label: String, value: String, valueColor: Color = .gray) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Text(value)
-                .foregroundColor(valueColor)
-        }
-    }
     
+    /// UI main body.
     var body: some View {
         GeometryReader { geometry in
-            // Portrait mode
             if geometry.size.width <= geometry.size.height {
-                VStack(alignment: .leading, spacing: 20) {
-                    ZStack {
-                        // Reserve the layout with a transparent placeholder.
-                        Color.clear.frame(height: 30)
-                        
-                        if isDetecting {
-                            HStack {
-                                Spacer()
-                                HStack(spacing: 8) {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .blue))
-                                        .scaleEffect(1.5)
-                                    Text("Detecting...")
-                                        .font(.title3)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.blue)
-                                        .multilineTextAlignment(.center)
-                                }
-                                Spacer()
-                            }
-                        }
-                    }
-
-                    HStack {
-                        Text("Camera Preview")
-                        Spacer()
-                        Button(action: {
-                            CameraManager.checkAndRequestCameraAccess { authorized in
-                                isCameraAuthorized = authorized
-                                if authorized {
-                                    showCameraView = true
-                                } else {
-                                    showCameraAccessDeniedAlert = true
-                                }
-                            }
-                        }) {
-                            Image(systemName: "camera.fill")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 24, height: 24)
-                                .foregroundColor(isDetecting ? Color.gray : Color.blue)
-                        }
-                        .disabled(isDetecting)
-                    }
-                    
-                    Divider()
-                    
-                    // GPS Status
-                    infoRow(label: "GPS",
-                            value: locationManager.gpsAvailable ? "ON" : "OFF",
-                            valueColor: locationManager.gpsAvailable ? .green : .red)
-                    
-                    Divider()
-                    
-                    // GPS Accuracy
-                    infoRow(label: "GPS accuracy (m)",
-                            value: locationManager.lastAccuracy.map { String(format: "%.2f", $0) } ?? "N/A",
-                            valueColor: locationManager.lastAccuracy != nil ? .green : .red)
-                    
-                    Divider()
-                    
-                    // Internet Connection
-                    infoRow(label: "Internet connection",
-                            value: networkMonitor.internetAvailable ? "ON" : "OFF",
-                            valueColor: networkMonitor.internetAvailable ? .green : .red)
-                    
-                    Divider()
-                    
-                    // Storage Available
-                    infoRow(label: "Storage available",
-                            value: "\(storageAvailable)GB",
-                            valueColor: .green)
-                    
-                    Divider()
-                    
-                    // Detect containers
-                    infoRow(label: "Detect containers",
-                            value: detectContainers ? "ON" : "OFF",
-                            valueColor: detectContainers ? .green : .red)
-                    
-                    Divider()
-                    
-                    Spacer()
-                    
-                    // Recorded Hours
-                    infoRow(label: "Recorded hours",
-                            value: formattedTime)
-                    
-                    Divider()
-                    
-                    // Total Images
-                    infoRow(label: "Total images",
-                            value: "\(detectionManager.totalImages)")
-                    
-                    Divider()
-                    
-                    // Objects Detected
-                    infoRow(label: "Objects detected",
-                            value: "\(detectionManager.objectsDetected)")
-                    
-                    Divider()
-                    
-                    // Images Delivered
-                    infoRow(label: "Images delivered",
-                            value: "\(detectionManager.imagesDelivered)")
-                    
-                    Divider()
-                    
-                    // Images Delivered
-                    HStack {
-                        Text("Delivery progress")
-                        Spacer()
-                        ProgressView(value: Double(detectionManager.imagesDelivered),
-                                     total: Double(detectionManager.totalImages))
-                            .progressViewStyle(LinearProgressViewStyle(tint: .green))
-                            .frame(width: 100)
-                    }
-                    
-                    Divider()
-                    
-                    // Buttons
-                    HStack(spacing: 20) {
-                        Button(action: {
-                            showingStopConfirmation = true
-                        }) {
-                            Text("Stop")
-                        }
-                        .buttonStyle(StopButtonStyle())
-                        .disabled(!isDetecting)
-                        .alert("Confirm Stop", isPresented: $showingStopConfirmation) {
-                            Button("Stop", role: .destructive) {
-                                isDetecting = false
-                                detectionManager.stopDetection()
-                            }
-                            Button("Cancel", role: .cancel) { }
-                        } message: {
-                            Text("Are you sure you want to stop? This will interrupt detection.")
-                        }
-                        
-                        Button(action: {
-                            CameraManager.checkAndRequestCameraAccess { authorized in
-                                isCameraAuthorized = authorized
-                                if authorized {
-                                    isDetecting = true
-                                    detectionManager.startDetection()
-                                } else {
-                                    showCameraAccessDeniedAlert = true
-                                }
-                            }
-                        }) {
-                            Text("Detect")
-                        }
-                        .buttonStyle(DetectButtonStyle())
-                        .disabled(isDetecting || !locationManager.gpsAvailable)
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .padding()
-                
+                portraitLayout
             } else {
-                // Landscape mode
-                HStack(spacing: 20) {
-                    // Left column
-                    VStack(alignment: .leading, spacing: 16) {
-
-                        HStack {
-                            Text("Camera Preview")
-                            Spacer()
-                            Button(action: {
-                                CameraManager.checkAndRequestCameraAccess { authorized in
-                                    isCameraAuthorized = authorized
-                                    if authorized {
-                                        showCameraView = true
-                                    } else {
-                                        showCameraAccessDeniedAlert = true
-                                    }
-                                }
-                            }) {
-                                Image(systemName: "camera.fill")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 24, height: 24)
-                                    .foregroundColor(isDetecting ? Color.gray : Color.blue)
-                            }
-                            .disabled(isDetecting)
-                        }
-                        
-                        Divider()
-
-                        infoRow(label: "GPS",
-                                value: locationManager.gpsAvailable ? "ON" : "OFF",
-                                valueColor: locationManager.gpsAvailable ? .green : .red)
-                        
-                        Divider()
-                        
-                        infoRow(label: "GPS accuracy (m)",
-                                value: locationManager.lastAccuracy.map { String(format: "%.2f", $0) } ?? "N/A",
-                                valueColor: locationManager.lastAccuracy != nil ? .green : .red)
-                        
-                        Divider()
-                        
-                        infoRow(label: "Internet connection",
-                                value: networkMonitor.internetAvailable ? "ON" : "OFF",
-                                valueColor: networkMonitor.internetAvailable ? .green : .red)
-                        
-                        Divider()
-                        
-                        infoRow(label: "Storage available",
-                                value: "\(storageAvailable)GB",
-                                valueColor: .green)
-                        
-                        Divider()
-                        
-                        infoRow(label: "Detect containers",
-                                value: detectContainers ? "ON" : "OFF",
-                                valueColor: detectContainers ? .green : .red)
-                        
-                        HStack {
-                            Spacer()
-                            Button(action: {
-                                showingStopConfirmation = true
-                            }) {
-                                Text("Stop")
-                            }
-                            .buttonStyle(StopButtonStyle())
-                            .disabled(!isDetecting)
-                            .alert("Confirm Stop", isPresented: $showingStopConfirmation) {
-                                Button("Stop", role: .destructive) {
-                                    isDetecting = false
-                                    detectionManager.stopDetection()
-                                }
-                                Button("Cancel", role: .cancel) { }
-                            } message: {
-                                Text("Are you sure you want to stop? This will interrupt detection.")
-                            }
-                        }
-                    }
-                    .padding()
-                    
-                    // Right column
-                    VStack(alignment: .leading, spacing: 16) {
-                        
-                        infoRow(label: "Recorded hours",
-                                value: formattedTime)
-                        
-                        Divider()
-                        
-                        infoRow(label: "Total images",
-                                value: "\(detectionManager.totalImages)")
-                        
-                        Divider()
-                        
-                        infoRow(label: "Objects detected",
-                                value: "\(detectionManager.objectsDetected)")
-                        
-                        Divider()
-                        
-                        infoRow(label: "Images delivered",
-                                value: "\(detectionManager.imagesDelivered)")
-                        
-                        Divider()
-                        
-                        HStack {
-                            Text("Delivery progress")
-                            Spacer()
-                            ProgressView(value: Double(detectionManager.imagesDelivered),
-                                         total: Double(detectionManager.totalImages))
-                                .progressViewStyle(LinearProgressViewStyle(tint: .green))
-                                .frame(width: 100)
-                        }
-                        
-                        Divider()
-                        
-                        // Empty row to align infoRows across columns
-                        infoRow(label: " ",
-                                value: " ")
-                        
-                        Button(action: {
-                            if !isDetecting {
-                                CameraManager.checkAndRequestCameraAccess { authorized in
-                                    isCameraAuthorized = authorized
-                                    if authorized {
-                                        DispatchQueue.main.async {
-                                            isDetecting = true
-                                            detectionManager.startDetection()
-                                        }
-                                    } else {
-                                        showCameraAccessDeniedAlert = true
-                                    }
-                                }
-                            }
-                        }) {
-                            if isDetecting {
-                                HStack(spacing: 8) {
-                                    Text("Detecting")
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        .scaleEffect(1.5)
-                                }
-                            } else {
-                                Text("Detect")
-                            }
-                        }
-                        .buttonStyle(DetectButtonStyle())
-                        .disabled(isDetecting || !locationManager.gpsAvailable)
-                    }
-                }
-                .padding()
+                landscapeLayout
             }
         }
         .onAppear {
@@ -395,8 +167,166 @@ struct MainView: View {
             CameraManager.showCameraAccessDeniedAlert()
         }
     }
+    
+    /// UI portrait mode layout.
+    private var portraitLayout: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            detectingBanner
+            cameraPreviewRow
+            Divider()
+            StatusRows(locationManager: locationManager,
+                       networkMonitor: networkMonitor,
+                       storageAvailable: storageAvailable,
+                       detectContainers: detectContainers)
+            Spacer()
+            DetectionStatsRows(detectionManager: detectionManager,
+                                formattedTime: formattedTime)
+            Divider()
+            detectionButtons
+        }
+        .padding()
+    }
+    
+    /// UI landscape mode layout.
+    private var landscapeLayout: some View {
+        HStack(spacing: 20) {
+            // Left column
+            VStack(alignment: .leading, spacing: 16) {
+                cameraPreviewRow
+                Divider()
+                StatusRows(locationManager: locationManager,
+                           networkMonitor: networkMonitor,
+                           storageAvailable: storageAvailable,
+                           detectContainers: detectContainers)
+                stopButton
+            }
+            .padding()
+
+            // Right column
+            VStack(alignment: .leading, spacing: 16) {
+                DetectionStatsRows(detectionManager: detectionManager,
+                                    formattedTime: formattedTime)
+                Divider()
+                infoRow(label: " ", value: " ") // spacer row for alignment
+                detectButton
+            }
+        }
+        .padding()
+    }
+    
+    /// Top screen banner that appears in portrait mode when detecting.
+    private var detectingBanner: some View {
+        ZStack {
+            Color.clear.frame(height: 30)
+            if isDetecting {
+                HStack {
+                    Spacer()
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                            .scaleEffect(1.5)
+                        Text("Detecting…")
+                            .font(.title3).bold().foregroundColor(.blue)
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+    
+    /// Row for camera preview button.
+    private var cameraPreviewRow: some View {
+        HStack {
+            Text("Camera Preview")
+            Spacer()
+            Button(action: authorizeAndShowCameraPreview) {
+                Image(systemName: "camera.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(isDetecting ? .gray : .blue)
+            }
+            .disabled(isDetecting)
+        }
+    }
+    
+    /// Button to stop detecting.
+    private var stopButton: some View {
+        Button("Stop") { showingStopConfirmation = true }
+            .buttonStyle(StopButtonStyle())
+            .disabled(!isDetecting)
+            .alert("Confirm Stop", isPresented: $showingStopConfirmation) {
+                Button("Stop", role: .destructive) { stopDetection() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Are you sure you want to stop? This will interrupt detection.")
+            }
+    }
+    
+    /// Button to start detecting.
+    private var detectButton: some View {
+        Button(action: startDetectionIfPossible) {
+            if isDetecting {
+                HStack(spacing: 8) {
+                    Text("Detecting")
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                }
+            } else {
+                Text("Detect")
+            }
+        }
+        .buttonStyle(DetectButtonStyle())
+        .disabled(isDetecting || !locationManager.gpsAvailable)
+    }
+    
+    /// Variable to align stop and start detection buttons next to eachother in portrait mode.
+    private var detectionButtons: some View {
+        HStack(spacing: 20) {
+            stopButton
+            detectButton
+        }
+        .frame(maxWidth: .infinity)
+    }
+    
+    /// Function to check and request camera access when camera preview is tapped.
+    private func authorizeAndShowCameraPreview() {
+        CameraManager.checkAndRequestCameraAccess { authorized in
+            isCameraAuthorized = authorized
+            if authorized {
+                showCameraView = true
+            } else {
+                showCameraAccessDeniedAlert = true
+            }
+        }
+    }
+    
+    /// Function to start detection if camera is accessible, and otherwise asks for access.
+    private func startDetectionIfPossible() {
+        guard !isDetecting else { return }
+        CameraManager.checkAndRequestCameraAccess { authorized in
+            isCameraAuthorized = authorized
+            if authorized {
+                DispatchQueue.main.async {
+                    isDetecting = true
+                    detectionManager.startDetection()
+                }
+            } else {
+                showCameraAccessDeniedAlert = true
+            }
+        }
+    }
+    
+    /// Function to stop the detection.
+    private func stopDetection() {
+        isDetecting = false
+        detectionManager.stopDetection()
+    }
+    
 }
 
+/// Detect button style.
 struct DetectButtonStyle : ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     
@@ -412,6 +342,7 @@ struct DetectButtonStyle : ButtonStyle {
     }
 }
 
+/// Stop button style.
 struct StopButtonStyle : ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
     
