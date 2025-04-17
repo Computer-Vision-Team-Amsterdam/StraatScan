@@ -18,9 +18,11 @@ func getAvailableDiskSpace() -> Int {
 }
 
 struct MainView: View {
+    @EnvironmentObject var iotManager: IoTDeviceManager
     @StateObject private var locationManager = LocationManager()
     @StateObject private var networkMonitor = NetworkMonitor()
-    @ObservedObject private var detectionManager = DetectionManager()
+    @ObservedObject private var detectionManager = DetectionManager.shared
+    
     @State private var storageAvailable: Int = 0
     @State private var detectContainers: Bool = UserDefaults.standard.bool(forKey: "detectContainers")
     
@@ -30,20 +32,26 @@ struct MainView: View {
     
     // Detection-related states
     @State private var isDetecting: Bool = false
-    @State private var imagesDelivered: Double = 0
-    @State private var imagesToDeliver: Double = 10 // for simulation; replace with your actual value
     @State private var showingStopConfirmation = false
     @State private var showCameraView: Bool = false
     @State private var isCameraAuthorized: Bool = false
     @State private var showCameraAccessDeniedAlert: Bool = false
     
+    private var isLocationAuthorized: Bool {
+        // Accesses the authorizationStatus published by the locationManager instance
+        locationManager.authorizationStatus == .authorizedWhenInUse || locationManager.authorizationStatus == .authorizedAlways
+    }
+    
+    // Timer to check storage periodically
     let storageTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect()
-    let deliverToAzureTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect() // simulate progress every 1 sec
+    // Timer to attempt uploading stored files periodically (e.g., every 5 minutes)
+    let deliverToAzureTimer = Timer.publish(every: 120, on: .main, in: .common).autoconnect()
+    
     var formattedTime: String {
         let totalSeconds = detectionManager.minutesRunning * 60
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.hour, .minute]
-        formatter.unitsStyle = .positional    // This produces "HH:mm:ss"
+        formatter.unitsStyle = .positional
         formatter.zeroFormattingBehavior = [.pad]
         return formatter.string(from: TimeInterval(totalSeconds)) ?? "00:00"
     }
@@ -66,6 +74,7 @@ struct MainView: View {
                     .padding()
                     Spacer()
                 }
+                .frame(height: 90)
             } else {
                 // Placeholder to maintain layout when not detecting.
                 Rectangle()
@@ -97,12 +106,13 @@ struct MainView: View {
             
             Divider()
             
-            // GPS Status
+            // GPS Active
             HStack {
-                Text("GPS")
+                Text("GPS Active")
                 Spacer()
-                Text(locationManager.gpsAvailable ? "ON" : "OFF")
-                    .foregroundColor(locationManager.gpsAvailable ? .green : .red)
+                let isActive = locationManager.isReceivingLocationUpdates
+                Text(isActive ? "ACTIVE" : "INACTIVE")
+                    .foregroundColor(isActive ? .green : .red)
             }
             
             Divider()
@@ -195,7 +205,7 @@ struct MainView: View {
                     HStack {
                         Text("Delivery progress")
                         Spacer()
-                        ProgressView(value: Double(detectionManager.imagesDelivered), total: Double(detectionManager.totalImages))
+                        ProgressView(value: Double(detectionManager.imagesDelivered), total: max(1.0, Double(detectionManager.totalImages)))
                             .progressViewStyle(LinearProgressViewStyle(tint: .green))
                             .frame(width: 100)
                     }
@@ -215,6 +225,7 @@ struct MainView: View {
                             Button("Stop", role: .destructive) {
                                 isDetecting = false
                                 detectionManager.stopDetection()
+                                detectionManager.deliverFilesFromDocuments()
                             }
                             Button("Cancel", role: .cancel) { }
                         } message: {
@@ -222,6 +233,9 @@ struct MainView: View {
                         }
                         
                         Button(action: {
+                            if !isLocationAuthorized {
+                                locationManager.requestAuthorization()
+                            }
                             CameraManager.checkAndRequestCameraAccess { authorized in
                                 isCameraAuthorized = authorized
                                 if authorized {
@@ -235,7 +249,7 @@ struct MainView: View {
                             Text("Detect")
                         }
                         .buttonStyle(DetectButtonStyle())
-                        .disabled(isDetecting || !locationManager.gpsAvailable)
+                        .disabled(isDetecting)
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -248,16 +262,25 @@ struct MainView: View {
             CameraManager.checkAndRequestCameraAccess { authorized in
                 isCameraAuthorized = authorized
             }
+            if !isLocationAuthorized {
+                locationManager.requestAuthorization()
+            }
         }
         .onReceive(storageTimer) { _ in
             storageAvailable = getAvailableDiskSpace()
         }
         .onReceive(deliverToAzureTimer) { _ in
-            detectionManager.deliverFilesFromDocuments()
+            if !isDetecting {
+                detectionManager.deliverFilesFromDocuments()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
             detectContainers = UserDefaults.standard.bool(forKey: "detectContainers")
-            print("detectContainers updated: \(detectContainers)")
+        }
+        .alert("Credential Error", isPresented: $iotManager.showingCredentialAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(iotManager.credentialAlertMessage)
         }
         .fullScreenCover(isPresented: $showCameraView) {
             CameraViewContainer(isCameraPresented: $showCameraView)

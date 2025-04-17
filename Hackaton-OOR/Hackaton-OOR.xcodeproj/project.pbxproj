@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		4F7B4F9F2DAD4E00004CCB35 /* Logging in Frameworks */ = {isa = PBXBuildFile; productRef = 4F7B4F9E2DAD4E00004CCB35 /* Logging */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		4FF468F22D4CDFAF001733D8 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -29,9 +33,22 @@
 		4FF468FB2D4CDFAF001733D8 /* Hackaton-OORUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Hackaton-OORUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		4FEE99102DA543F2003907FF /* Exceptions for "Hackaton-OOR" folder in "Hackaton-OOR" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 4FF468E02D4CDFAC001733D8 /* Hackaton-OOR */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4FF468E32D4CDFAC001733D8 /* Hackaton-OOR */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				4FEE99102DA543F2003907FF /* Exceptions for "Hackaton-OOR" folder in "Hackaton-OOR" target */,
+			);
 			path = "Hackaton-OOR";
 			sourceTree = "<group>";
 		};
@@ -52,6 +69,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4F7B4F9F2DAD4E00004CCB35 /* Logging in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +130,7 @@
 			);
 			name = "Hackaton-OOR";
 			packageProductDependencies = (
+				4F7B4F9E2DAD4E00004CCB35 /* Logging */,
 			);
 			productName = "Hackaton-OOR";
 			productReference = 4FF468E12D4CDFAC001733D8 /* Hackaton-OOR.app */;
@@ -195,6 +214,9 @@
 			);
 			mainGroup = 4FF468D82D4CDFAC001733D8;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				4F7B4F9D2DAD4E00004CCB35 /* XCRemoteSwiftPackageReference "swift-log" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4FF468E22D4CDFAC001733D8 /* Products */;
 			projectDirPath = "";
@@ -390,6 +412,8 @@
 		};
 		4FF469062D4CDFAF001733D8 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 4FF468E32D4CDFAC001733D8 /* Hackaton-OOR */;
+			baseConfigurationReferenceRelativePath = Secrets.xcconfig;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -398,7 +422,8 @@
 				DEVELOPMENT_ASSET_PATHS = "\"Hackaton-OOR/Preview Content\"";
 				DEVELOPMENT_TEAM = W6SA8G6GG8;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "$(SRCROOT)/Hackaton-OOR/Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The app needs access to your camera to detect containers.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "The app needs access to your location to collect metadata for object detection.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -411,7 +436,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "nl.amsterdam.cvt.hackaton-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "nl.amsterdam.cvt.hackaton-ios.sdavrieux";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -421,6 +446,8 @@
 		};
 		4FF469072D4CDFAF001733D8 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 4FF468E32D4CDFAC001733D8 /* Hackaton-OOR */;
+			baseConfigurationReferenceRelativePath = Secrets.xcconfig;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -429,7 +456,8 @@
 				DEVELOPMENT_ASSET_PATHS = "\"Hackaton-OOR/Preview Content\"";
 				DEVELOPMENT_TEAM = W6SA8G6GG8;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "$(SRCROOT)/Hackaton-OOR/Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The app needs access to your camera to detect containers.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "The app needs access to your location to collect metadata for object detection.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -442,7 +470,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "nl.amsterdam.cvt.hackaton-ios";
+				PRODUCT_BUNDLE_IDENTIFIER = "nl.amsterdam.cvt.hackaton-ios.sdavrieux";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -558,6 +586,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		4F7B4F9D2DAD4E00004CCB35 /* XCRemoteSwiftPackageReference "swift-log" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-log.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.6.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4F7B4F9E2DAD4E00004CCB35 /* Logging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4F7B4F9D2DAD4E00004CCB35 /* XCRemoteSwiftPackageReference "swift-log" */;
+			productName = Logging;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 4FF468D92D4CDFAC001733D8 /* Project object */;
 }

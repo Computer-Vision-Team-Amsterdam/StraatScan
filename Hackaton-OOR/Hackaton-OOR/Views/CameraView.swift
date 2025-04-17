@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
+import Logging
 
 // MARK: - Camera View Container with Exit Button
 struct CameraViewContainer: View {
@@ -36,11 +37,12 @@ struct CameraPreviewRepresentable: UIViewControllerRepresentable {
 class CameraPreviewController: UIViewController {
     var captureSession: AVCaptureSession!
     var videoPreviewLayer: AVCaptureVideoPreviewLayer!
-    
+    private let logger = Logger(label: "nl.amsterdam.cvt.hackaton-ios.CameraPreviewController")
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-        
+
         // Set up the capture session.
         captureSession = AVCaptureSession()
         captureSession.sessionPreset = .high
@@ -48,6 +50,7 @@ class CameraPreviewController: UIViewController {
         guard let videoDevice = AVCaptureDevice.default(for: .video),
               let videoInput = try? AVCaptureDeviceInput(device: videoDevice),
               captureSession.canAddInput(videoInput) else {
+            logger.error("Failed to get video device input.")
             CameraManager.presentVideoInputErrorAlert(on: self)
             return
         }
@@ -59,7 +62,8 @@ class CameraPreviewController: UIViewController {
         view.layer.addSublayer(videoPreviewLayer)
         
         // Start running the session asynchronously.
-        DispatchQueue.global(qos: .userInitiated).async {
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
             self.captureSession.startRunning()
         }
     }
@@ -69,7 +73,7 @@ class CameraPreviewController: UIViewController {
         videoPreviewLayer.frame = view.bounds
         updateVideoOrientation()
     }
-    
+
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         coordinator.animate { _ in
             self.videoPreviewLayer.frame = self.view.bounds
