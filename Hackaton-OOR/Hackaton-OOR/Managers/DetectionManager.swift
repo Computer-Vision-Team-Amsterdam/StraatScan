@@ -29,6 +29,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// The Vision model wrapper for the CoreML model.
     private var detector: VNCoreMLModel?
     
+    /// Map between labels codes and names
+    private var modelLabelMapping: [String: Int] = [:]
+    
     /// Stores the last captured pixel buffer for saving or processing.
     private var lastPixelBufferForSaving: CVPixelBuffer?
     
@@ -79,7 +82,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         super.init()
         
         if !self.iotHubHost.isEmpty {
-             self.uploader = AzureIoTDataUploader(host: self.iotHubHost, iotDeviceManager: self.iotManager)
+            self.uploader = AzureIoTDataUploader(host: self.iotHubHost, iotDeviceManager: self.iotManager)
         } else {
             // Log critical error if host is missing - uploader cannot function
             managerLogger.critical("IoTHubHost key is missing or empty in Info.plist. AzureIoTDataUploader cannot be initialized.")
@@ -91,14 +94,61 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         modelConfig.computeUnits = .all
         
         do {
-            // Replace `yolov8m` with the actual name of your generated model class.
             let loadedModel = try yolov8m(configuration: modelConfig).model
             self.mlModel = loadedModel
             let vnModel = try VNCoreMLModel(for: loadedModel)
             vnModel.featureProvider = ThresholdManager.shared.getThresholdProvider()
             self.detector = vnModel
+            
+            guard let model = self.mlModel else {
+                throw NSError(domain: "DetectionManagerError", code: 1, userInfo: [NSLocalizedDescriptionKey: "MLModel is nil after loading."])
+            }
+            
+            let metadata = model.modelDescription.metadata
+            managerLogger.debug("Model metadata keys: \(metadata.keys)")
+            
+            if let creatorMetadataAny = metadata[MLModelMetadataKey.creatorDefinedKey],
+               let creatorMetadataDict = creatorMetadataAny as? [String: Any],
+               let namesString = creatorMetadataDict["names"] as? String {
+                var names: [String] = []
+                let trimmedContent = namesString.trimmingCharacters(in: CharacterSet(charactersIn: "{} "))
+                
+                if !trimmedContent.isEmpty {
+                    let components = trimmedContent.split(separator: ",")
+                    
+                    names = components.compactMap { component -> String? in
+                        guard let colonIndex = component.firstIndex(of: ":") else { return nil }
+                        let valuePart = component[component.index(after: colonIndex)...]
+                        let name = valuePart.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "'")))
+                        return name.isEmpty ? nil : String(name)
+                    }
+                    if names.isEmpty {
+                        managerLogger.critical("Parsing the dictionary-like 'names' string resulted in an empty array. Check raw string format. Raw: \"\(namesString)\". Mapping will be empty.")
+                    } else {
+                        var generatedMapping: [String: Int] = [:]
+                        for (index, name) in names.enumerated() {
+                            generatedMapping[name.lowercased()] = index
+                        }
+                        self.modelLabelMapping = generatedMapping
+                        managerLogger.info("Successfully generated label mapping from model (\(self.modelLabelMapping.count) classes). Parsed names: \(names)")
+                    }
+                }
+                
+            } else {
+                if metadata[MLModelMetadataKey.creatorDefinedKey] == nil {
+                    managerLogger.critical("Model metadata does not contain creatorDefinedKey ('\(MLModelMetadataKey.creatorDefinedKey)'). Mapping will be empty.")
+                } else if (metadata[MLModelMetadataKey.creatorDefinedKey] as? [String: Any]) == nil {
+                    managerLogger.critical("Value for creatorDefinedKey is not [String: Any]. Actual type: \(type(of: metadata[MLModelMetadataKey.creatorDefinedKey]!)). Mapping will be empty.")
+                } else if (metadata[MLModelMetadataKey.creatorDefinedKey] as! [String: Any])["names"] == nil {
+                    managerLogger.critical("Creator metadata dictionary does not contain key 'names'. Mapping will be empty.")
+                } else if (metadata[MLModelMetadataKey.creatorDefinedKey] as! [String: Any])["names"] as? String == nil {
+                    managerLogger.critical("Value for key 'names' is not a String. Actual type: \(type(of: (metadata[MLModelMetadataKey.creatorDefinedKey] as! [String: Any])["names"]!)). Mapping will be empty.")
+                } else {
+                    managerLogger.critical("Could not extract 'names' string from model metadata for unknown reason. Mapping will be empty.")
+                }
+            }
         } catch {
-            managerLogger.critical("Error loading model: \(error)")
+            managerLogger.critical("Error loading model or processing metadata: \(error)")
         }
         
         // 2. Create the Vision request.
@@ -163,7 +213,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         detectionTimer?.invalidate()
         detectionTimer = nil
     }
-  
+    
     // MARK: - Private Methods
     
     /// Updates the detection thresholds if they have been adjusted.
@@ -220,7 +270,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             managerLogger.critical("Vision request failed with error: \(error.localizedDescription)")
             return
         }
-
+        
         guard let results = request.results as? [VNRecognizedObjectObservation], !results.isEmpty else {
             return
         }
@@ -247,23 +297,23 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             managerLogger.critical("Error: Missing last pixel buffer for processing.")
             return
         }
-
+        
         // Convert buffer to image (can fail)
         guard var image = self.imageFromPixelBuffer(pixelBuffer: pixelBuffer) else {
             managerLogger.critical("Error: Failed to convert pixel buffer to image.")
-             self.lastPixelBufferForSaving = nil // Clear buffer if conversion failed
-             return
+            self.lastPixelBufferForSaving = nil // Clear buffer if conversion failed
+            return
         }
-
+        
         let imageSize = image.size
         var sensitiveBoxes = [CGRect]()
         var containerBoxes = [CGRect]()
-
+        
         for observation in results {
             if let label = observation.labels.first?.identifier.lowercased() {
                 let normRect = observation.boundingBox
                 let rectInImage = VNImageRectForNormalizedRect(normRect, Int(imageSize.width), Int(imageSize.height))
-
+                
                 if label == "container" {
                     self.objectsDetected += 1 // Increment on main thread
                     containerBoxes.append(rectInImage)
@@ -272,7 +322,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 }
             }
         }
-
+        
         if !sensitiveBoxes.isEmpty,
            let imageWithBlackBoxes = self.coverSensitiveAreasWithBlackBox(in: image, boxes: sensitiveBoxes) {
             image = imageWithBlackBoxes
@@ -333,13 +383,13 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         DispatchQueue.main.async {
             self.totalImages += 1
         }
-
+        
         // Generate filename base
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyyMMdd_HHmmssSSS"
         let dateString = dateFormatter.string(from: Date())
         let fileNameBase = "detection_\(dateString)"
-
+        
         // --- Upload Image ---
         if let imageData = image.jpegData(compressionQuality: 0.5) {
             let blobName = "\(fileNameBase).jpg"
@@ -367,14 +417,38 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         } else {
             managerLogger.critical("Error: Could not get JPEG data from processed image.")
         }
-
+        
         // --- Upload Metadata ---
-        let metadata = createMetadata(predictions: predictions, dateString: dateString)
+        let metadataCreator = MetadataCreator()
+        let currentImageFileName = "\(fileNameBase).jpg" // Example
+        
+        var currentLocationData: LocationData? = nil
+        if let lastKnownLocation = locationManager.lastKnownLocation,
+           let timestamp = locationManager.lastTimestamp,
+           let accuracy = locationManager.lastAccuracy {
+            currentLocationData = LocationData(
+                latitude: lastKnownLocation.latitude,
+                longitude: lastKnownLocation.longitude,
+                timestamp: timestamp,
+                accuracy: accuracy
+            )
+        } else {
+            managerLogger.warning("Location data unavailable for metadata.")
+        }
+        
+        let metadataObject: MetadataOutput = metadataCreator.create(
+            predictions: predictions,
+            imageTimestamp: self.lastPixelBufferTimestamp ?? Date().timeIntervalSince1970,
+            locationData: currentLocationData,
+            imageFileName: currentImageFileName,
+            labelMapping: self.modelLabelMapping
+        )
         do {
-            let jsonData = try JSONSerialization.data(withJSONObject: metadata, options: .prettyPrinted)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let jsonData = try encoder.encode(metadataObject)
             let blobName = "\(fileNameBase).json"
             
-            // Use Task to call the async upload function
             Task {
                 do {
                     managerLogger.info("Attempting to upload metadata: \(blobName)")
@@ -389,38 +463,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             managerLogger.critical("Error serializing metadata: \(error)")
         }
     }
-
-    /// Creates the metadata dictionary for a detection event.
-    private func createMetadata(predictions: [VNRecognizedObjectObservation], dateString: String) -> [String: Any] {
-        var predictionsMetadata = [[String: Any]]()
-        for prediction in predictions {
-            if let bestLabel = prediction.labels.first?.identifier {
-                let meta: [String: Any] = [
-                    "label": bestLabel,
-                    "confidence": prediction.labels.first?.confidence ?? 0,
-                    "boundingBox": [
-                        "x": prediction.boundingBox.origin.x,
-                        "y": prediction.boundingBox.origin.y,
-                        "width": prediction.boundingBox.size.width,
-                        "height": prediction.boundingBox.size.height
-                    ]
-                ]
-                predictionsMetadata.append(meta)
-            }
-        }
-
-        let metadata: [String: Any] = [
-            "date": dateString,
-            "predictions": predictionsMetadata,
-            "latitude": locationManager.lastKnownLocation?.latitude as Any? ?? "",
-            "longitude": locationManager.lastKnownLocation?.longitude as Any? ?? "",
-            "image_timestamp": self.lastPixelBufferTimestamp as Any? ?? "",
-            "gps_timestamp": locationManager.lastTimestamp as Any? ?? "",
-            "gps_accuracy": locationManager.lastAccuracy as Any? ?? ""
-        ]
-        return metadata
-    }
-
+    
     /// Saves data locally to the Detections folder.
     private func saveFileLocally(data: Data, filename: String) {
         do {
@@ -439,7 +482,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     func deliverFilesFromDocuments() {
         guard let uploader = self.uploader else {
             managerLogger.critical("Error: AzureIoTDataUploader not initialized. Cannot deliver stored files.")
-             return
+            return
         }
         
         do {
@@ -449,7 +492,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                                                                        options: [.skipsHiddenFiles])
             if fileURLs.isEmpty {
                 managerLogger.info("No pending files found in Detections folder.")
-                 return
+                return
             }
             
             managerLogger.info("Found \(fileURLs.count) pending files to upload.")
@@ -466,10 +509,10 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                         managerLogger.info("Attempting to upload stored file: \(blobName)")
                         try await uploader.uploadData(fileData, blobName: blobName)
                         managerLogger.info("Successfully uploaded stored file \(blobName). Deleting local copy.")
-
+                        
                         try FileManager.default.removeItem(at: fileURL)
                         managerLogger.info("Deleted local file \(blobName)")
-
+                        
                         DispatchQueue.main.async {
                             self.imagesDelivered += 1
                         }
@@ -518,7 +561,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         }
         return nil
     }
-
+    
     /// Draws rectangles around container areas in an image.
     /// - Parameters:
     ///   - image: The image to process.
