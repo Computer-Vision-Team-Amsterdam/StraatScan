@@ -42,8 +42,8 @@ struct StatusRows: View {
     var body: some View {
         Group {
             infoRow(label: "GPS",
-                    value: locationManager.gpsAvailable ? "ON" : "OFF",
-                    valueColor: locationManager.gpsAvailable ? .green : .red)
+                    value: locationManager.isReceivingLocationUpdates ? "ON" : "OFF",
+                    valueColor: locationManager.isReceivingLocationUpdates ? .green : .red)
             Divider()
 
             infoRow(label: "GPS accuracy (m)",
@@ -295,7 +295,7 @@ struct MainView: View {
             }
         }
         .buttonStyle(DetectButtonStyle())
-        .disabled(isDetecting || !locationManager.gpsAvailable)
+        .disabled(isDetecting || !locationManager.isReceivingLocationUpdates)
     }
     
     /// Variable to align stop and start detection buttons next to eachother in portrait mode.
