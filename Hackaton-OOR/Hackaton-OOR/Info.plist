@@ -18,12 +18,20 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CameraSessionPreset</key>
+	<string>hd1280x720</string>
 	<key>ConfidenceThreshold</key>
 	<string>0.25</string>
+	<key>ContainerBoxLineWidth</key>
+	<string>3</string>
 	<key>DEVICE_ID</key>
 	<string>$(DEVICE_ID)</string>
 	<key>DEVICE_SAS_TOKEN</key>
 	<string>$(DEVICE_SAS_TOKEN)</string>
+	<key>FrameCompressionQuality</key>
+	<string>0.5</string>
+	<key>FrameRateFPS</key>
+	<string>2</string>
 	<key>IoTHubHost</key>
 	<string>iothub-oor-ont-weu-itr-01.azure-devices.net</string>
 	<key>IoUThreshold</key>

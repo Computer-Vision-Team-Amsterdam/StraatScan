@@ -50,6 +50,12 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// The Azure IoT Hub host URL.
     private let iotHubHost: String
     
+    /// The compression rate for captured frames
+    private var frameCompressionQuality: Double
+    
+    /// The line width when plotting bounding boxes on frames
+    private var containerBoxLineWidth: CGFloat
+    
     /// Indicates whether the video capture has been successfully configured.
     private(set) var isConfigured: Bool = false
     
@@ -78,6 +84,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         self.lastConfidenceThreshold = Double(infoDict?["ConfidenceThreshold"] as? String ?? "0.25") ?? 0.25
         self.lastIoUThreshold = Double(infoDict?["IoUThreshold"] as? String ?? "0.45") ?? 0.45
         self.iotHubHost = infoDict?["IoTHubHost"] as? String ?? "iothub-oor-ont-weu-itr-01.azure-devices.net"
+        self.frameCompressionQuality = Double(infoDict?["FrameCompressionQuality"] as? String ?? "0.5") ?? 0.5
+        self.containerBoxLineWidth = CGFloat((infoDict?["ContainerBoxLineWidth"] as? String).flatMap(Double.init) ?? 3)
         
         super.init()
         
@@ -391,7 +399,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         let fileNameBase = "detection_\(dateString)"
         
         // --- Upload Image ---
-        if let imageData = image.jpegData(compressionQuality: 0.5) {
+        if let imageData = image.jpegData(compressionQuality: self.frameCompressionQuality) {
             let blobName = "\(fileNameBase).jpg"
             
             guard let uploader = self.uploader else {
@@ -573,14 +581,15 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         in image: UIImage,
         boxes: [CGRect],
         color: UIColor = .red,
-        lineWidth: CGFloat = 3.0
+        lineWidth: CGFloat? = nil
     ) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: image.size)
+        let stroke = lineWidth ?? containerBoxLineWidth
         return renderer.image { context in
             image.draw(at: .zero)
             
             context.cgContext.setStrokeColor(color.cgColor)
-            context.cgContext.setLineWidth(lineWidth)
+            context.cgContext.setLineWidth(stroke)
             
             for box in boxes {
                 // Convert the box from Vision's coordinate system (bottom-left origin)
