@@ -3,55 +3,68 @@ import CoreML
 
 /// A singleton manager for handling threshold settings used in object detection.
 class ThresholdManager {
-
-    /// Shared instance
+    
+    /// The shared instance of the `ThresholdManager`.
     static let shared = ThresholdManager()
-
+    
     /// Private initializer to enforce singleton usage.
     private init() {}
 
-    /// Returns a `ThresholdProvider` reflecting the latest stored or plist‑based values.
+    /// Retrieves a `ThresholdProvider` instance with the current threshold settings.
+    /// - Returns: A `ThresholdProvider` configured with the current thresholds.
     func getThresholdProvider() -> ThresholdProvider {
-        ThresholdProvider(fromDefaults: true)
+        return ThresholdProvider(fromDefaults: true)
     }
 }
 
-/// A provider for IoU and confidence thresholds consumed by Core ML models.
+/// A provider for threshold values used in object detection models.
 class ThresholdProvider: MLFeatureProvider {
-
-    // MARK: Public thresholds
+    
+    /// The Intersection over Union (IoU) threshold for object detection.
     var iouThreshold: Double
+    
+    /// The confidence threshold for object detection.
     var confidenceThreshold: Double
 
-    // MARK: MLFeatureProvider
-    var featureNames: Set<String> { ["iouThreshold", "confidenceThreshold"] }
+    /// The set of feature names provided by this provider.
+    var featureNames: Set<String> {
+        return ["iouThreshold", "confidenceThreshold"]
+    }
 
+    /// Retrieves the feature value for a given feature name.
+    /// - Parameter featureName: The name of the feature.
+    /// - Returns: The feature value, or `nil` if the feature name is not recognized.
     func featureValue(for featureName: String) -> MLFeatureValue? {
         switch featureName {
-        case "iouThreshold":         return MLFeatureValue(double: iouThreshold)
-        case "confidenceThreshold":  return MLFeatureValue(double: confidenceThreshold)
-        default:                      return nil
+        case "iouThreshold":
+            return MLFeatureValue(double: iouThreshold)
+        case "confidenceThreshold":
+            return MLFeatureValue(double: confidenceThreshold)
+        default:
+            return nil
         }
     }
 
-    // MARK: Initialisers
+    /// Initializes a `ThresholdProvider` with specific IoU and confidence thresholds.
+    /// - Parameters:
+    ///   - iouThreshold: The IoU threshold (default is 0.45).
+    ///   - confidenceThreshold: The confidence threshold (default is 0.25).
     init(iouThreshold: Double = 0.45, confidenceThreshold: Double = 0.25) {
         self.iouThreshold = iouThreshold
         self.confidenceThreshold = confidenceThreshold
     }
 
-    /// Loads values from UserDefaults if present; otherwise falls back to Info.plist, then hard‑coded defaults.
+    /// Initializes a `ThresholdProvider` using values stored in `UserDefaults`.
+    /// If no values are stored, values from Info.plist are used, otherwise hard-coded defaults.
+    /// - Parameter fromDefaults: A flag indicating whether to load thresholds from `UserDefaults`.
     convenience init(fromDefaults: Bool) {
         let storedConf = UserDefaults.standard.double(forKey: "confidenceThreshold")
         let storedIou  = UserDefaults.standard.double(forKey: "iouThreshold")
 
-        // Read fallback values from Info.plist.
-        let plistConf = (Bundle.main.object(forInfoDictionaryKey: "ConfidenceThreshold") as? String)
-            .flatMap(Double.init) ?? 0.25
-        let plistIou  = (Bundle.main.object(forInfoDictionaryKey: "IoUThreshold") as? String)
-            .flatMap(Double.init) ?? 0.45
+        let infoDict   = Bundle.main.infoDictionary
+        let plistConf  = Double(infoDict?["ConfidenceThreshold"] as? String ?? "0.25") ?? 0.25
+        let plistIou   = Double(infoDict?["IoUThreshold"]    as? String ?? "0.45") ?? 0.45
 
-        // If UserDefaults value is 0 (never set), use plist; else keep stored value.
         let finalConf = storedConf == 0 ? plistConf : storedConf
         let finalIou  = storedIou  == 0 ? plistIou  : storedIou
 
