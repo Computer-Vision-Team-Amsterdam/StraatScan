@@ -15,15 +15,14 @@ import AVFoundation
 import CoreVideo
 import UIKit
 
-// Defines the protocol for handling video frame capture events.
+// MARK: - VideoCaptureDelegate
 public protocol VideoCaptureDelegate: AnyObject {
     func videoCapture(_ capture: VideoCapture, didCaptureVideoFrame: CMSampleBuffer)
 }
 
-// Identifies the best available camera device based on user preferences and device capabilities.
+// MARK: - Camera selector
 func bestCaptureDevice(for position: AVCaptureDevice.Position) -> AVCaptureDevice {
     if position == .back {
-        // バックカメラの場合
         if UserDefaults.standard.bool(forKey: "use_telephoto"),
            let device = AVCaptureDevice.default(.builtInTelephotoCamera, for: .video, position: .back) {
             return device
@@ -36,7 +35,6 @@ func bestCaptureDevice(for position: AVCaptureDevice.Position) -> AVCaptureDevic
             fatalError("Expected back camera device is not available.")
         }
     } else if position == .front {
-        // フロントカメラの場合
         if let device = AVCaptureDevice.default(.builtInTrueDepthCamera, for: .video, position: .front) {
             return device
         } else if let device = AVCaptureDevice.default(
@@ -50,6 +48,7 @@ func bestCaptureDevice(for position: AVCaptureDevice.Position) -> AVCaptureDevic
     }
 }
 
+// MARK: - VideoCapture
 public class VideoCapture: NSObject {
     public var previewLayer: AVCaptureVideoPreviewLayer?
     public weak var delegate: VideoCaptureDelegate?
@@ -60,7 +59,7 @@ public class VideoCapture: NSObject {
     var cameraOutput = AVCapturePhotoOutput()
     let queue = DispatchQueue(label: "camera-queue")
 
-    // Configures the camera and capture session with optional session presets.
+    // MARK: Setup
     public func setUp(
         sessionPreset: AVCaptureSession.Preset? = nil,
         completion: @escaping (Bool) -> Void
@@ -81,7 +80,7 @@ public class VideoCapture: NSObject {
         }
     }
 
-    // Internal method to configure camera inputs, outputs, and session properties.
+    // MARK: Camera configuration
     private func setUpCamera(sessionPreset: AVCaptureSession.Preset) -> Bool {
         captureSession.beginConfiguration()
         captureSession.sessionPreset = sessionPreset
@@ -89,15 +88,14 @@ public class VideoCapture: NSObject {
         guard let videoInput = try? AVCaptureDeviceInput(device: captureDevice) else {
             return false
         }
-
         if captureSession.canAddInput(videoInput) {
             captureSession.addInput(videoInput)
         }
 
-        let previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
-        previewLayer.videoGravity = .resizeAspectFill
-        previewLayer.connection?.videoOrientation = .portrait
-        self.previewLayer = previewLayer
+        let preview = AVCaptureVideoPreviewLayer(session: captureSession)
+        preview.videoGravity = .resizeAspectFill
+        preview.connection?.videoRotationAngle = 90
+        self.previewLayer = preview
 
         let settings: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: NSNumber(value: kCVPixelFormatType_32BGRA)
@@ -113,22 +111,12 @@ public class VideoCapture: NSObject {
         if captureSession.canAddOutput(cameraOutput) {
             captureSession.addOutput(cameraOutput)
         }
-        switch UIDevice.current.orientation {
-        case .portrait:
-            videoOutput.connection(with: .video)?.videoOrientation = .portrait
-        case .portraitUpsideDown:
-            videoOutput.connection(with: .video)?.videoOrientation = .portraitUpsideDown
-        case .landscapeRight:
-            videoOutput.connection(with: .video)?.videoOrientation = .landscapeLeft
-        case .landscapeLeft:
-            videoOutput.connection(with: .video)?.videoOrientation = .landscapeRight
-        default:
-            videoOutput.connection(with: .video)?.videoOrientation = .portrait
+
+        applyCurrentOrientation(to: videoOutput.connection(with: .video))
+        if let vConn = videoOutput.connection(with: .video) {
+            previewLayer?.connection?.videoRotationAngle = vConn.videoRotationAngle
         }
 
-        if let connection = videoOutput.connection(with: .video) {
-            self.previewLayer?.connection?.videoOrientation = connection.videoOrientation
-        }
         do {
             try captureDevice.lockForConfiguration()
 
@@ -152,12 +140,11 @@ public class VideoCapture: NSObject {
         return true
     }
 
-    // Starts the video capture session.
+    // MARK: Session control
     public func start() {
-        if !captureSession.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                self?.captureSession.startRunning()
-            }
+        guard !captureSession.isRunning else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            self?.captureSession.startRunning()
         }
     }
 
@@ -168,28 +155,30 @@ public class VideoCapture: NSObject {
         }
     }
 
+    // MARK: Orientation handling
     func updateVideoOrientation() {
         guard let connection = videoOutput.connection(with: .video) else { return }
-        switch UIDevice.current.orientation {
-        case .portrait:
-            connection.videoOrientation = .portrait
-        case .portraitUpsideDown:
-            connection.videoOrientation = .portraitUpsideDown
-        case .landscapeRight:
-            connection.videoOrientation = .landscapeLeft
-        case .landscapeLeft:
-            connection.videoOrientation = .landscapeRight
-        default:
-            return
-        }
+        applyCurrentOrientation(to: connection)
+        previewLayer?.connection?.videoRotationAngle = connection.videoRotationAngle
 
-        let currentInput = self.captureSession.inputs.first as? AVCaptureDeviceInput
-        connection.isVideoMirrored = currentInput?.device.position == .front
-        self.previewLayer?.connection?.videoOrientation = connection.videoOrientation
+        if let currentInput = captureSession.inputs.first as? AVCaptureDeviceInput {
+            connection.isVideoMirrored = currentInput.device.position == .front
+        }
+    }
+
+    private func applyCurrentOrientation(to connection: AVCaptureConnection?) {
+        guard let conn = connection else { return }
+        switch UIDevice.current.orientation {
+        case .portrait:          conn.videoRotationAngle = 90
+        case .portraitUpsideDown: conn.videoRotationAngle = 270
+        case .landscapeLeft:     conn.videoRotationAngle = 180
+        case .landscapeRight:    conn.videoRotationAngle = 0
+        default:                 conn.videoRotationAngle = 90
+        }
     }
 }
 
-// Extension to handle AVCaptureVideoDataOutputSampleBufferDelegate events.
+// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
 extension VideoCapture: AVCaptureVideoDataOutputSampleBufferDelegate {
     public func captureOutput(
         _ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
