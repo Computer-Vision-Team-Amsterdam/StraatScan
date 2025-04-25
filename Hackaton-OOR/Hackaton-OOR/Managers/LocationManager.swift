@@ -66,7 +66,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     func stopLocationUpdates() {
         managerLogger.info("Stopping location updates.")
         locationManager.stopUpdatingLocation()
-        DispatchQueue.main.async {
+        Task { @MainActor in
              self.isReceivingLocationUpdates = false
         }
     }
@@ -87,7 +87,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     /// Ensures updates happen on the main thread.
     /// - Parameter location: The validated CLLocation object.
     private func updateWithValidatedLocation(_ location: CLLocation) {
-        DispatchQueue.main.async {
+        Task { @MainActor in
             self.lastKnownLocation = location.coordinate
             self.lastAccuracy = location.horizontalAccuracy
             self.lastTimestamp = location.timestamp.timeIntervalSince1970
@@ -105,7 +105,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     /// Ensures updates happen on the main thread.
     /// - Parameter status: The new CLAuthorizationStatus.
     private func updateAuthorizationStatus(_ status: CLAuthorizationStatus) {
-        DispatchQueue.main.async {
+        Task { @MainActor in
              self.authorizationStatus = status
              if status != .authorizedWhenInUse && status != .authorizedAlways {
                   self.isReceivingLocationUpdates = false
@@ -145,7 +145,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         }
         guard latestLocation.horizontalAccuracy > 0 && latestLocation.horizontalAccuracy <= minimumHorizontalAccuracy else {
             managerLogger.debug("Ignoring location with poor horizontal accuracy: \(String(format: "%.1f", latestLocation.horizontalAccuracy))m.")
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.isReceivingLocationUpdates = false
                 self.lastAccuracy = latestLocation.horizontalAccuracy
             }
@@ -161,18 +161,20 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
         updateAuthorizationStatus(manager.authorizationStatus)
 
         if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
-             managerLogger.info("Authorization granted/changed, ensuring location updates are started.")
-             locationManager.startUpdatingLocation()
+            Task { @MainActor in
+                managerLogger.info("Authorization granted/changed, ensuring location updates are started.")
+                locationManager.startUpdatingLocation()
+            }
         } else {
-             managerLogger.warning("Authorization revoked or insufficient, stopping location updates.")
-             locationManager.stopUpdatingLocation()
-             DispatchQueue.main.async {
-                  self.isReceivingLocationUpdates = false
-                  self.lastKnownLocation = nil
-                  self.lastAccuracy = nil
-                  self.lastHeading = nil
-                  self.lastTimestamp = nil
-             }
+            Task { @MainActor in
+                managerLogger.warning("Authorization revoked or insufficient, stopping location updates.")
+                locationManager.stopUpdatingLocation()
+                self.isReceivingLocationUpdates = false
+                self.lastKnownLocation = nil
+                self.lastAccuracy      = nil
+                self.lastHeading       = nil
+                self.lastTimestamp     = nil
+            }
         }
     }
 
@@ -180,7 +182,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         managerLogger.error("Location Manager Error: \(error.localizedDescription)")
 
-        DispatchQueue.main.async {
+        Task { @MainActor in
             self.isReceivingLocationUpdates = false
             self.lastAccuracy = nil
 

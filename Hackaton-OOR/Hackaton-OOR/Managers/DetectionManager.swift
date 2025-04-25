@@ -10,8 +10,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     // MARK: - Dependencies
     static let shared = DetectionManager()
     private var locationManager = LocationManager()
-    private let iotManager = IoTDeviceManager()
     private var uploader: AzureIoTDataUploader?
+    @MainActor private let iotManager = IoTDeviceManager()
     
     // MARK: - Private properties
     /// Create a logger specific to this manager
@@ -86,7 +86,10 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         } else {
             // Log critical error if host is missing - uploader cannot function
             managerLogger.critical("IoTHubHost key is missing or empty in Info.plist. AzureIoTDataUploader cannot be initialized.")
-            self.iotManager.notifyUserOfCredentialError(message: "IoT Hub configuration is missing. Upload functionality disabled.")
+            Task { @MainActor in
+                self.iotManager.notifyUserOfCredentialError(
+                    message: "IoT Hub configuration is missing. Upload functionality disabled.")
+              }
         }
         
         // 1. Load the YOLO model.
@@ -174,10 +177,10 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 self.isConfigured = true
             } else {
                 self.managerLogger.critical("Video capture setup failed.")
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     self.iotManager.notifyUserOfCredentialError(message: "Failed to initialize video capture. Detection may not work.")
                 }
-            }
+            } 
         }
     }
     
@@ -189,7 +192,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         guard isConfigured else {
             managerLogger.warning("Video capture not configured yet. Delaying startDetection()...")
             // Optionally, schedule a retry after a short delay.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(500))
                 self.startDetection()
             }
             return
@@ -200,7 +204,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         detectionTimer?.invalidate()
         detectionTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.minutesRunning += 1
             }
         }
@@ -275,7 +279,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             return
         }
         
-        DispatchQueue.main.async(execute: {
+        Task { @MainActor in
             if let results = request.results as? [VNRecognizedObjectObservation] {
                 // --- Step 1: Check if at least one "container" is detected.
                 let containerDetected = results.contains { observation in
@@ -288,7 +292,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                     self.processDetectedFrame(results: results)
                 }
             }
-        })
+        }
     }
     
     /// Handles processing after a container has been detected in a frame.
@@ -315,7 +319,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 let rectInImage = VNImageRectForNormalizedRect(normRect, Int(imageSize.width), Int(imageSize.height))
                 
                 if label == "container" {
-                    self.objectsDetected += 1 // Increment on main thread
+                    Task { @MainActor in self.objectsDetected += 1 }
                     containerBoxes.append(rectInImage)
                 } else if ["person", "license plate"].contains(label) { // Example sensitive classes
                     sensitiveBoxes.append(rectInImage)
@@ -380,7 +384,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     ///   - predictions: The list of detected objects.
     func deliverDetectionToAzure(image: UIImage, predictions: [VNRecognizedObjectObservation]) {
         managerLogger.info("Preparing detection data for Azure delivery...")
-        DispatchQueue.main.async {
+        Task { @MainActor in
             self.totalImages += 1
         }
         
@@ -405,7 +409,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 do {
                     managerLogger.info("Attempting to upload image: \(blobName)")
                     try await uploader.uploadData(imageData, blobName: blobName)
-                    DispatchQueue.main.async {
+                    Task { @MainActor in
                         self.imagesDelivered += 1
                     }
                     managerLogger.info("Image \(blobName) uploaded successfully!")
@@ -496,7 +500,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             }
             
             managerLogger.info("Found \(fileURLs.count) pending files to upload.")
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.totalImages += fileURLs.count
             }
             
@@ -513,7 +517,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                         try FileManager.default.removeItem(at: fileURL)
                         managerLogger.info("Deleted local file \(blobName)")
                         
-                        DispatchQueue.main.async {
+                        Task { @MainActor in
                             self.imagesDelivered += 1
                         }
                     } catch let error as AzureIoTError {

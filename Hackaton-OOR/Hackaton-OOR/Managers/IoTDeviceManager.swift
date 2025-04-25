@@ -5,6 +5,7 @@ import SwiftUI // Needed for @Published and DispatchQueue.main
 import Logging // For logging errors
 
 /// An ObservableObject managing IoT device credentials and related state like errors.
+@MainActor
 class IoTDeviceManager: ObservableObject {
 
     /// Create a logger specific to this manager
@@ -129,15 +130,13 @@ class IoTDeviceManager: ObservableObject {
     ///   - key: The key indicating which property to update (`deviceIdKey` or `sasTokenKey`).
     ///   - value: The new value for the property.
     private func updatePublishedProperty(forKey key: String, with value: String) {
-        DispatchQueue.main.async {
-            switch key {
-            case self.deviceIdKey:
-                self.deviceId = value
-            case self.sasTokenKey:
-                self.deviceSasToken = value
-            default:
-                self.managerLogger.warning("Attempted to update unknown published property for key: \(key)")
-            }
+        switch key {
+        case self.deviceIdKey:
+            self.deviceId = value
+        case self.sasTokenKey:
+            self.deviceSasToken = value
+        default:
+            self.managerLogger.warning("Attempted to update unknown published property for key: \(key)")
         }
     }
 
@@ -146,10 +145,8 @@ class IoTDeviceManager: ObservableObject {
     /// Ensures UI updates happen on the main thread.
     /// - Parameter message: The error message to display.
     func notifyUserOfCredentialError(message: String) {
-        DispatchQueue.main.async {
-            self.credentialAlertMessage = message
-            self.showingCredentialAlert = true
-        }
+        self.credentialAlertMessage = message
+        self.showingCredentialAlert = true
     }
 
     /// Saves a value to the Keychain for a given key.

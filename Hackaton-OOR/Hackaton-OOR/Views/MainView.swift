@@ -325,7 +325,7 @@ struct MainView: View {
         CameraManager.checkAndRequestCameraAccess { authorized in
             isCameraAuthorized = authorized
             if authorized {
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     isDetecting = true
                     detectionManager.startDetection()
                 }

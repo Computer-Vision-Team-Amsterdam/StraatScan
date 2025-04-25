@@ -15,7 +15,7 @@ class NetworkMonitor: ObservableObject {
     /// Initializes the `NetworkMonitor` and starts monitoring network changes.
     init() {
         monitor.pathUpdateHandler = { path in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.internetAvailable = (path.status == .satisfied)
             }
         }

@@ -71,7 +71,7 @@ public class VideoCapture: NSObject {
   ) {
     queue.async {
       let success = self.setUpCamera(sessionPreset: sessionPreset)
-      DispatchQueue.main.async {
+      Task { @MainActor in
         completion(success)
       }
     }

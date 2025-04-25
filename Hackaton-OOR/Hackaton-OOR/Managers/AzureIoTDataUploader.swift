@@ -87,11 +87,11 @@ class AzureIoTDataUploader {
     func uploadData(_ data: Data, blobName: String) async throws {
         logger.info("Starting data upload process for blob: \(blobName)")
 
-        guard let deviceId = iotDeviceManager.deviceId else {
+        guard let deviceId = await iotDeviceManager.deviceId else {
             logger.error("Upload failed: Device ID is missing.")
             throw AzureIoTError.missingCredentials("Device ID")
         }
-        guard let sasToken = iotDeviceManager.deviceSasToken else {
+        guard let sasToken = await iotDeviceManager.deviceSasToken else {
             logger.error("Upload failed: SAS Token is missing.")
             throw AzureIoTError.missingCredentials("SAS Token")
         }

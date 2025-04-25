@@ -12,7 +12,7 @@ class CameraManager {
         case .notDetermined:
             // First time: request access.
             AVCaptureDevice.requestAccess(for: .video) { granted in
-                DispatchQueue.main.async {
+                Task { @MainActor in
                     completion(granted)
                 }
             }
