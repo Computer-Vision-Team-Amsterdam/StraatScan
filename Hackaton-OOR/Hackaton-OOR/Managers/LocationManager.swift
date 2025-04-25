@@ -171,9 +171,9 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, ObservableObje
                 locationManager.stopUpdatingLocation()
                 self.isReceivingLocationUpdates = false
                 self.lastKnownLocation = nil
-                self.lastAccuracy      = nil
-                self.lastHeading       = nil
-                self.lastTimestamp     = nil
+                self.lastAccuracy = nil
+                self.lastHeading = nil
+                self.lastTimestamp = nil
             }
         }
     }
