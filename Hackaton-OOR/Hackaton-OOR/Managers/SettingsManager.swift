@@ -55,14 +55,18 @@ class ThresholdProvider: MLFeatureProvider {
     }
 
     /// Initializes a `ThresholdProvider` using values stored in `UserDefaults`.
-    /// If no values are stored, default thresholds are used.
+    /// If no values are stored, values from Info.plist are used, otherwise hard-coded defaults.
     /// - Parameter fromDefaults: A flag indicating whether to load thresholds from `UserDefaults`.
     convenience init(fromDefaults: Bool) {
         let storedConf = UserDefaults.standard.double(forKey: "confidenceThreshold")
         let storedIou = UserDefaults.standard.double(forKey: "iouThreshold")
 
-        let finalConf = storedConf == 0 ? 0.25 : storedConf
-        let finalIou = storedIou == 0 ? 0.45 : storedIou
+        let infoDict = Bundle.main.infoDictionary
+        let plistConf = Double(infoDict?["ConfidenceThreshold"] as? String ?? "0.25") ?? 0.25
+        let plistIou = Double(infoDict?["IoUThreshold"]    as? String ?? "0.45") ?? 0.45
+
+        let finalConf = storedConf == 0 ? plistConf : storedConf
+        let finalIou = storedIou  == 0 ? plistIou  : storedIou
 
         self.init(iouThreshold: finalIou, confidenceThreshold: finalConf)
     }
