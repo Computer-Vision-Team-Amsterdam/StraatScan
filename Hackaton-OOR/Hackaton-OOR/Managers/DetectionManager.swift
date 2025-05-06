@@ -3,13 +3,19 @@ import AVFoundation
 import CoreML
 import Vision
 import UIKit
+import Logging
 
 /// A singleton manager that encapsulates video capture and YOLO-based object detection.
 class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
+    // MARK: - Dependencies
     static let shared = DetectionManager()
     private var locationManager = LocationManager()
+    private let iotManager = IoTDeviceManager()
+    private var uploader: AzureIoTDataUploader?
     
     // MARK: - Private properties
+    /// Create a logger specific to this manager
+    private let managerLogger = Logger(label: "nl.amsterdam.cvt.hackaton-ios.DetectionManager")
     
     /// Handles video capture from the device's camera.
     private var videoCapture: VideoCapture?
@@ -23,6 +29,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// The Vision model wrapper for the CoreML model.
     private var detector: VNCoreMLModel?
     
+    /// Map between labels codes and names
+    private var modelLabelMapping: [String: Int] = [:]
+    
     /// Stores the last captured pixel buffer for saving or processing.
     private var lastPixelBufferForSaving: CVPixelBuffer?
     
@@ -32,11 +41,14 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// The current pixel buffer being processed.
     private var currentBuffer: CVPixelBuffer?
     
-    /// Handles data uploads to Azure IoT Hub.
-    private var uploader: AzureIoTDataUploader?
-    
     /// The Azure IoT Hub host URL.
     private let iotHubHost: String
+    
+    /// The compression rate for captured frames
+    private var frameCompressionQuality: Double
+    
+    /// The line width when plotting bounding boxes on frames
+    private var containerBoxLineWidth: CGFloat
     
     /// Indicates whether the video capture has been successfully configured.
     private(set) var isConfigured: Bool = false
@@ -63,24 +75,84 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     override init() {
         // Use centralized configuration from AppConfiguration.
         let config = AppConfiguration.shared
-        self.iotHubHost = config.iothubHost
+        // Fetch values from Info.plist
+        let infoDict = Bundle.main.infoDictionary
+        self.lastConfidenceThreshold = Double(infoDict?["ConfidenceThreshold"] as? String ?? "0.25") ?? 0.25
+        self.lastIoUThreshold = Double(infoDict?["IoUThreshold"] as? String ?? "0.45") ?? 0.45
+        self.iotHubHost = infoDict?["IoTHubHost"] as? String ?? "iothub-oor-ont-weu-itr-01.azure-devices.net"
+        self.frameCompressionQuality = Double(infoDict?["FrameCompressionQuality"] as? String ?? "0.5") ?? 0.5
+        self.containerBoxLineWidth = CGFloat((infoDict?["ContainerBoxLineWidth"] as? String).flatMap(Double.init) ?? 3)
         
         super.init()
-        self.uploader = AzureIoTDataUploader(host: self.iotHubHost)
+        
+        if !self.iotHubHost.isEmpty {
+            self.uploader = AzureIoTDataUploader(host: self.iotHubHost, iotDeviceManager: self.iotManager)
+        } else {
+            // Log critical error if host is missing - uploader cannot function
+            managerLogger.critical("IoTHubHost key is missing or empty in Info.plist. AzureIoTDataUploader cannot be initialized.")
+            self.iotManager.notifyUserOfCredentialError(message: "IoT Hub configuration is missing. Upload functionality disabled.")
+        }
         
         // 1. Load the YOLO model.
         let modelConfig = MLModelConfiguration()
         modelConfig.computeUnits = .all
         
         do {
-            // Replace `yolov8m` with the actual name of your generated model class.
             let loadedModel = try yolov8m(configuration: modelConfig).model
             self.mlModel = loadedModel
             let vnModel = try VNCoreMLModel(for: loadedModel)
             vnModel.featureProvider = config.staticThresholdProvider
             self.detector = vnModel
+            
+            guard let model = self.mlModel else {
+                throw NSError(domain: "DetectionManagerError", code: 1, userInfo: [NSLocalizedDescriptionKey: "MLModel is nil after loading."])
+            }
+            
+            let metadata = model.modelDescription.metadata
+            managerLogger.debug("Model metadata keys: \(metadata.keys)")
+            
+            if let creatorMetadataAny = metadata[MLModelMetadataKey.creatorDefinedKey],
+               let creatorMetadataDict = creatorMetadataAny as? [String: Any],
+               let namesString = creatorMetadataDict["names"] as? String {
+                var names: [String] = []
+                let trimmedContent = namesString.trimmingCharacters(in: CharacterSet(charactersIn: "{} "))
+                
+                if !trimmedContent.isEmpty {
+                    let components = trimmedContent.split(separator: ",")
+                    
+                    names = components.compactMap { component -> String? in
+                        guard let colonIndex = component.firstIndex(of: ":") else { return nil }
+                        let valuePart = component[component.index(after: colonIndex)...]
+                        let name = valuePart.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "'")))
+                        return name.isEmpty ? nil : String(name)
+                    }
+                    if names.isEmpty {
+                        managerLogger.critical("Parsing the dictionary-like 'names' string resulted in an empty array. Check raw string format. Raw: \"\(namesString)\". Mapping will be empty.")
+                    } else {
+                        var generatedMapping: [String: Int] = [:]
+                        for (index, name) in names.enumerated() {
+                            generatedMapping[name.lowercased()] = index
+                        }
+                        self.modelLabelMapping = generatedMapping
+                        managerLogger.info("Successfully generated label mapping from model (\(self.modelLabelMapping.count) classes). Parsed names: \(names)")
+                    }
+                }
+                
+            } else {
+                if metadata[MLModelMetadataKey.creatorDefinedKey] == nil {
+                    managerLogger.critical("Model metadata does not contain creatorDefinedKey ('\(MLModelMetadataKey.creatorDefinedKey)'). Mapping will be empty.")
+                } else if (metadata[MLModelMetadataKey.creatorDefinedKey] as? [String: Any]) == nil {
+                    managerLogger.critical("Value for creatorDefinedKey is not [String: Any]. Actual type: \(type(of: metadata[MLModelMetadataKey.creatorDefinedKey]!)). Mapping will be empty.")
+                } else if (metadata[MLModelMetadataKey.creatorDefinedKey] as! [String: Any])["names"] == nil {
+                    managerLogger.critical("Creator metadata dictionary does not contain key 'names'. Mapping will be empty.")
+                } else if (metadata[MLModelMetadataKey.creatorDefinedKey] as! [String: Any])["names"] as? String == nil {
+                    managerLogger.critical("Value for key 'names' is not a String. Actual type: \(type(of: (metadata[MLModelMetadataKey.creatorDefinedKey] as! [String: Any])["names"]!)). Mapping will be empty.")
+                } else {
+                    managerLogger.critical("Could not extract 'names' string from model metadata for unknown reason. Mapping will be empty.")
+                }
+            }
         } catch {
-            print("Error loading model: \(error)")
+            managerLogger.critical("Error loading model or processing metadata: \(error)")
         }
         
         // 2. Create the Vision request.
@@ -90,6 +162,10 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             })
             // Set the option for cropping/scaling (adjust as needed).
             visionRequest?.imageCropAndScaleOption = .scaleFill
+        } else if self.mlModel != nil {
+            managerLogger.critical("Error: Failed to create VNCoreMLModel from loaded MLModel.")
+        } else {
+            managerLogger.critical("Error: MLModel not loaded, cannot create Vision request.")
         }
         
         // 3. Set up video capture.
@@ -98,10 +174,13 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         // You can change the sessionPreset if needed.
         videoCapture?.setUp(sessionPreset: .hd1280x720) { success in
             if success {
-                print("Video capture setup successful.")
+                self.managerLogger.info("Video capture setup successful.")
                 self.isConfigured = true
             } else {
-                print("Video capture setup failed.")
+                self.managerLogger.critical("Video capture setup failed.")
+                DispatchQueue.main.async {
+                    self.iotManager.notifyUserOfCredentialError(message: "Failed to initialize video capture. Detection may not work.")
+                }
             }
         }
     }
@@ -112,7 +191,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// Ensures the video capture is configured before starting.
     func startDetection() {
         guard isConfigured else {
-            print("Video capture not configured yet. Delaying startDetection()...")
+            managerLogger.warning("Video capture not configured yet. Delaying startDetection()...")
             // Optionally, schedule a retry after a short delay.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.startDetection()
@@ -120,7 +199,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             return
         }
         videoCapture?.start()
-        print("Detection started.")
+        managerLogger.info("Detection started.")
+        detectionTimer?.invalidate()
         detectionTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             DispatchQueue.main.async {
@@ -132,7 +212,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// Stops the object detection process and invalidates the detection timer.
     func stopDetection() {
         videoCapture?.stop()
-        print("Detection stopped.")
+        managerLogger.info("Detection stopped.")
         detectionTimer?.invalidate()
         detectionTimer = nil
     }
@@ -159,7 +239,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             do {
                 try handler.perform([request])
             } catch {
-                print("Error performing Vision request: \(error)")
+                managerLogger.critical("Error performing Vision request: \(error)")
             }
             // Reset the currentBuffer so that you can process the next frame.
             currentBuffer = nil
@@ -173,6 +253,15 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     ///   - request: The Vision request containing detection results.
     ///   - error: An optional error if the request failed.
     func processObservations(for request: VNRequest, error: Error?) {
+        if let error = error {
+            managerLogger.critical("Vision request failed with error: \(error.localizedDescription)")
+            return
+        }
+        
+        guard let results = request.results as? [VNRecognizedObjectObservation], !results.isEmpty else {
+            return
+        }
+        
         DispatchQueue.main.async(execute: {
             if let results = request.results as? [VNRecognizedObjectObservation] {
 
@@ -182,7 +271,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                     ("scaffolding", UserDefaults.standard.bool(forKey: "detectScaffoldings"))
                 ]
 
-                // Check if at least one enabled target is detected in the observations.
+                // --- Step 1: Check if at least one enabled target is detected in the observations.
                 let shouldProcess = targetClasses.contains { (objectName, isEnabled) in
                     return isEnabled && results.contains { observation in
                         if let label = observation.labels.first?.identifier.lowercased() {
@@ -192,58 +281,76 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                     }
                 }
                 if shouldProcess {
-                    // --- Step 2: Identify sensitive objects and collect their bounding boxes.
-                    // Define your sensitive classes.
-                    let sensitiveClasses: Set<String> = ["person", "license plate"]
-                    var sensitiveBoxes = [CGRect]()
-                    var detectedBoxes: [String: [CGRect]] = [:]
-                    var detectionCounts: [String: Int] = [:]
-                    
-                    // For each observation that is sensitive, convert its normalized bounding box to image coordinates.
-                    // (Assume 'image' is created from your saved pixel buffer.)
-                    if let pixelBuffer = self.lastPixelBufferForSaving,
-                       var image = self.imageFromPixelBuffer(pixelBuffer: pixelBuffer) {
-                        
-                        let imageSize = image.size
-                        for observation in results {
-                            if let label = observation.labels.first?.identifier.lowercased() {
-                                let normRect = observation.boundingBox
-                                let rectInImage = VNImageRectForNormalizedRect(normRect, Int(imageSize.width), Int(imageSize.height))
-
-                                if targetClasses.contains(where: { $0.enabled && $0.name == label }) {
-                                    detectedBoxes[label, default: []].append(rectInImage)
-                                    detectionCounts[label, default: 0] += 1
-                                } else if sensitiveClasses.contains(label) {
-                                    sensitiveBoxes.append(rectInImage)
-                                }
-                            }
-                        }
-
-                        let totalDetected = detectionCounts.values.reduce(0, +)
-                        DispatchQueue.main.async {
-                            self.objectsDetected += totalDetected
-                        }
-                        
-                        if !sensitiveBoxes.isEmpty,
-                           let imageWithBlackBoxes = self.coverSensitiveAreasWithBlackBox(in: image, boxes: sensitiveBoxes) {
-                            image = imageWithBlackBoxes
-                        }
-
-                        // If drawing bounding boxes is enabled, draw them on the image.
-                        if UserDefaults.standard.bool(forKey: "drawBoundingBoxes") {
-                            let colors: [String: UIColor] = [
-                                "container": .red,
-                                "mobile toilet": .blue,
-                                "scaffolding": .green
-                            ]
-                            image = self.drawSquaresAroundDetectedAreas(in: image, boxesPerObject: detectedBoxes, colors: colors)
-                        }
-                        self.deliverDetectionToAzure(image: image, predictions: results)
-                        self.lastPixelBufferForSaving = nil
-                    }
+                    self.managerLogger.info("Object detected, processing frame...")
+                    self.processDetectedFrame(results: results)
                 }
             }
         })
+    }
+    
+    /// Handles processing after a container has been detected in a frame.
+    private func processDetectedFrame(results: [VNRecognizedObjectObservation]) {
+        guard let pixelBuffer = self.lastPixelBufferForSaving else {
+            managerLogger.critical("Error: Missing last pixel buffer for processing.")
+            return
+        }
+        
+        // Convert buffer to image (can fail)
+        guard var image = self.imageFromPixelBuffer(pixelBuffer: pixelBuffer) else {
+            managerLogger.critical("Error: Failed to convert pixel buffer to image.")
+            self.lastPixelBufferForSaving = nil // Clear buffer if conversion failed
+            return
+        }
+
+        // --- Step 2: Identify sensitive objects and collect their bounding boxes.
+        // Define your sensitive classes.
+        let sensitiveClasses: Set<String> = ["person", "license plate"]
+        var sensitiveBoxes = [CGRect]()
+        var detectedBoxes: [String: [CGRect]] = [:]
+        var detectionCounts: [String: Int] = [:]
+        
+        // For each observation that is sensitive, convert its normalized bounding box to image coordinates.
+        // (Assume 'image' is created from your saved pixel buffer.)
+        if let pixelBuffer = self.lastPixelBufferForSaving,
+            var image = self.imageFromPixelBuffer(pixelBuffer: pixelBuffer) {
+            
+            let imageSize = image.size
+            for observation in results {
+                if let label = observation.labels.first?.identifier.lowercased() {
+                    let normRect = observation.boundingBox
+                    let rectInImage = VNImageRectForNormalizedRect(normRect, Int(imageSize.width), Int(imageSize.height))
+
+                    if targetClasses.contains(where: { $0.enabled && $0.name == label }) {
+                        detectedBoxes[label, default: []].append(rectInImage)
+                        detectionCounts[label, default: 0] += 1
+                    } else if sensitiveClasses.contains(label) {
+                        sensitiveBoxes.append(rectInImage)
+                    }
+                }
+            }
+
+            let totalDetected = detectionCounts.values.reduce(0, +)
+            DispatchQueue.main.async {
+                self.objectsDetected += totalDetected
+            }
+            
+            if !sensitiveBoxes.isEmpty,
+                let imageWithBlackBoxes = self.coverSensitiveAreasWithBlackBox(in: image, boxes: sensitiveBoxes) {
+                image = imageWithBlackBoxes
+            }
+
+            // If drawing bounding boxes is enabled, draw them on the image.
+            if UserDefaults.standard.bool(forKey: "drawBoundingBoxes") {
+                let colors: [String: UIColor] = [
+                    "container": .red,
+                    "mobile toilet": .blue,
+                    "scaffolding": .green
+                ]
+                image = self.drawSquaresAroundDetectedAreas(in: image, boxesPerObject: detectedBoxes, colors: colors)
+            }
+            self.deliverDetectionToAzure(image: image, predictions: results)
+            self.lastPixelBufferForSaving = nil
+        }
     }
     
     /// Converts a pixel buffer to a UIImage.
@@ -260,6 +367,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     
     enum FileError: Error {
         case documentsFolderNotFound(String)
+        case fileOperationFailed(String, Error)
     }
     
     /// Retrieves the "Detections" folder in the app's Documents directory.
@@ -268,8 +376,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     func getDetectionsFolder() throws -> URL {
         // Locate the "Detections" folder in the app’s Documents directory.
         guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            print("Could not locate Documents folder.")
-            throw FileError.documentsFolderNotFound("Could not locate Documents folder.")
+            let message = "Could not locate Documents folder."
+            managerLogger.critical("\(message)")
+            throw FileError.documentsFolderNotFound(message)
         }
         let detectionsFolderURL = documentsURL.appendingPathComponent("Detections")
         
@@ -277,9 +386,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         if !FileManager.default.fileExists(atPath: detectionsFolderURL.path) {
             do {
                 try FileManager.default.createDirectory(at: detectionsFolderURL, withIntermediateDirectories: true, attributes: nil)
-                print("Created Detections folder at: \(detectionsFolderURL.path)")
+                managerLogger.info("Created Detections folder at: \(detectionsFolderURL.path)")
             } catch {
-                print("Error creating folder: \(error.localizedDescription)")
+                managerLogger.critical("Error creating folder: \(error.localizedDescription)")
                 throw FileError.documentsFolderNotFound("Error creating folder: \(error.localizedDescription)")
             }
         }
@@ -290,146 +399,156 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// - Parameters:
     ///   - image: The image containing the detection results.
     ///   - predictions: The list of detected objects.
-    func deliverDetectionToAzure(image: UIImage, predictions: [VNRecognizedObjectObservation]){
-        print("deliverDetectionToAzure")
+    func deliverDetectionToAzure(image: UIImage, predictions: [VNRecognizedObjectObservation]) {
+        managerLogger.info("Preparing detection data for Azure delivery...")
         DispatchQueue.main.async {
             self.totalImages += 1
         }
-        // Generate a filename using the current date/time.
+        
+        // Generate filename base
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyyMMdd_HHmmssSSS"
         let dateString = dateFormatter.string(from: Date())
         let fileNameBase = "detection_\(dateString)"
-        print(fileNameBase)
         
-        // Upload image
-        if let imageData = image.jpegData(compressionQuality: 0.5) {
-            uploader?.uploadData(imageData, blobName: "\(fileNameBase).jpg") { error in
-                if let error = error {
-                    print("Data upload failed: \(error.localizedDescription)")
-                    do {
-                        let detectionsFolderURL = try self.getDetectionsFolder()
-                        let imageURL = detectionsFolderURL.appendingPathComponent("\(fileNameBase).jpg")
-                        try imageData.write(to: imageURL)
-                        print("Saved image at \(imageURL)")
-                    } catch {
-                        print("Error saving image: \(error)")
-                    }
-                } else {
+        // --- Upload Image ---
+        if let imageData = image.jpegData(compressionQuality: self.frameCompressionQuality) {
+            let blobName = "\(fileNameBase).jpg"
+            
+            guard let uploader = self.uploader else {
+                managerLogger.critical("Error: AzureIoTDataUploader not initialized. Cannot deliver detection.")
+                saveFileLocally(data: imageData, filename: blobName)
+                return
+            }
+            
+            // Use Task to call the async upload function
+            Task {
+                do {
+                    managerLogger.info("Attempting to upload image: \(blobName)")
+                    try await uploader.uploadData(imageData, blobName: blobName)
                     DispatchQueue.main.async {
                         self.imagesDelivered += 1
                     }
-                    print("Data uploaded successfully!")
+                    managerLogger.info("Image \(blobName) uploaded successfully!")
+                } catch {
+                    managerLogger.critical("Image upload failed for \(blobName): \(error.localizedDescription)")
+                    saveFileLocally(data: imageData, filename: blobName)
                 }
             }
+        } else {
+            managerLogger.critical("Error: Could not get JPEG data from processed image.")
         }
         
-        // Build the metadata for each prediction.
-        var predictionsMetadata = [[String: Any]]()
-        for prediction in predictions {
-            if let bestLabel = prediction.labels.first?.identifier {
-                let meta: [String: Any] = [
-                    "label": bestLabel,
-                    "confidence": prediction.labels.first?.confidence ?? 0,
-                    "boundingBox": [
-                        "x": prediction.boundingBox.origin.x,
-                        "y": prediction.boundingBox.origin.y,
-                        "width": prediction.boundingBox.size.width,
-                        "height": prediction.boundingBox.size.height
-                    ]
-                ]
-                predictionsMetadata.append(meta)
-            }
+        // --- Upload Metadata ---
+        let metadataCreator = MetadataCreator()
+        let currentImageFileName = "\(fileNameBase).jpg" // Example
+        
+        var currentLocationData: LocationData? = nil
+        if let lastKnownLocation = locationManager.lastKnownLocation,
+           let timestamp = locationManager.lastTimestamp,
+           let accuracy = locationManager.lastAccuracy {
+            currentLocationData = LocationData(
+                latitude: lastKnownLocation.latitude,
+                longitude: lastKnownLocation.longitude,
+                timestamp: timestamp,
+                accuracy: accuracy
+            )
+        } else {
+            managerLogger.warning("Location data unavailable for metadata.")
         }
         
-        // Create the metadata dictionary.
-        var metadata: [String: Any] = [
-            "date": dateString,
-            "predictions": predictionsMetadata
-        ]
-        if let coordinate = locationManager.lastKnownLocation {
-            metadata["latitude"] = coordinate.latitude
-            metadata["longitude"] = coordinate.longitude
-        } else {
-            metadata["latitude"] = ""
-            metadata["longitude"] = ""
-        }
-        if self.lastPixelBufferTimestamp != nil {
-            metadata["image_timestamp"] = self.lastPixelBufferTimestamp
-        } else {
-            metadata["image_timestamp"] = ""
-        }
-        if let timestamp = locationManager.lastTimestamp {
-            metadata["gps_timestamp"] = timestamp
-        } else {
-            metadata["gps_timestamp"] = ""
-        }
-        if let gps_accuracy = locationManager.lastAccuracy {
-            metadata["gps_accuracy"] = gps_accuracy
-        } else {
-            metadata["gps_accuracy"] = ""
-        }
-        // Deliver to Azure the metadata as a JSON file.
+        let metadataObject: MetadataOutput = metadataCreator.create(
+            predictions: predictions,
+            imageTimestamp: self.lastPixelBufferTimestamp ?? Date().timeIntervalSince1970,
+            locationData: currentLocationData,
+            imageFileName: currentImageFileName,
+            labelMapping: self.modelLabelMapping
+        )
         do {
-            let jsonData = try JSONSerialization.data(withJSONObject: metadata, options: .prettyPrinted)
-            uploader?.uploadData(jsonData, blobName: "\(fileNameBase).json") { error in
-                if let error = error {
-                    print("Data upload failed: \(error.localizedDescription)")
-                    do {
-                        let detectionsFolderURL = try self.getDetectionsFolder()
-                        let metadataURL = detectionsFolderURL.appendingPathComponent("\(fileNameBase).json")
-                        try jsonData.write(to: metadataURL)
-                        print("Saved metadata at \(metadataURL)")
-                    } catch {
-                        print("Error saving metadata: \(error)")
-                    }
-                } else {
-                    print("Data uploaded successfully!")
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let jsonData = try encoder.encode(metadataObject)
+            let blobName = "\(fileNameBase).json"
+            
+            Task {
+                do {
+                    managerLogger.info("Attempting to upload metadata: \(blobName)")
+                    try await uploader?.uploadData(jsonData, blobName: blobName)
+                    managerLogger.info("Metadata \(blobName) uploaded successfully!")
+                } catch {
+                    managerLogger.critical("Metadata upload failed for \(blobName): \(error.localizedDescription)")
+                    saveFileLocally(data: jsonData, filename: blobName)
                 }
             }
         } catch {
-            print("Error saving metadata: \(error)")
+            managerLogger.critical("Error serializing metadata: \(error)")
+        }
+    }
+    
+    /// Saves data locally to the Detections folder.
+    private func saveFileLocally(data: Data, filename: String) {
+        do {
+            let detectionsFolderURL = try self.getDetectionsFolder()
+            let fileURL = detectionsFolderURL.appendingPathComponent(filename)
+            try data.write(to: fileURL)
+            managerLogger.info("Saved file locally at \(fileURL.path)")
+        } catch let error as FileError {
+            managerLogger.critical("Error saving file \(filename) locally: \(error.localizedDescription)")
+        } catch {
+            managerLogger.critical("Unexpected error saving file \(filename) locally: \(error)")
         }
     }
     
     /// Uploads any remaining files in the "Detections" folder to Azure IoT Hub.
     func deliverFilesFromDocuments() {
+        guard let uploader = self.uploader else {
+            managerLogger.critical("Error: AzureIoTDataUploader not initialized. Cannot deliver stored files.")
+            return
+        }
+        
         do {
             let detectionsFolderURL = try self.getDetectionsFolder()
             let fileURLs = try FileManager.default.contentsOfDirectory(at: detectionsFolderURL,
                                                                        includingPropertiesForKeys: nil,
-                                                                       options: [])
+                                                                       options: [.skipsHiddenFiles])
+            if fileURLs.isEmpty {
+                managerLogger.info("No pending files found in Detections folder.")
+                return
+            }
+            
+            managerLogger.info("Found \(fileURLs.count) pending files to upload.")
             DispatchQueue.main.async {
                 self.totalImages += fileURLs.count
             }
-            for fileURL in fileURLs {
-                do {
-                    let fileData = try Data(contentsOf: fileURL)
+            
+            Task { [weak self] in
+                guard let self = self else { return }
+                for fileURL in fileURLs {
                     let blobName = fileURL.lastPathComponent
-                    
-                    uploader?.uploadData(fileData, blobName: blobName) { error in
-                        if let error = error {
-                            print("Error uploading file \(blobName): \(error)")
-                        } else {
-                            print("Successfully uploaded file \(blobName). Now deleting it.")
-                            do {
-                                // Delete the file after successful upload.
-                                try FileManager.default.removeItem(at: fileURL)
-                                print("Deleted file \(blobName)")
-                                DispatchQueue.main.async {
-                                    self.imagesDelivered += 1
-                                }
-                            } catch {
-                                print("Error deleting file \(blobName): \(error)")
-                            }
+                    do {
+                        let fileData = try Data(contentsOf: fileURL)
+                        managerLogger.info("Attempting to upload stored file: \(blobName)")
+                        try await uploader.uploadData(fileData, blobName: blobName)
+                        managerLogger.info("Successfully uploaded stored file \(blobName). Deleting local copy.")
+                        
+                        try FileManager.default.removeItem(at: fileURL)
+                        managerLogger.info("Deleted local file \(blobName)")
+                        
+                        DispatchQueue.main.async {
+                            self.imagesDelivered += 1
                         }
+                    } catch let error as AzureIoTError {
+                        managerLogger.critical("Error uploading stored file \(blobName): \(error.localizedDescription)")
+                    } catch {
+                        managerLogger.critical("Error processing or uploading stored file \(blobName): \(error)")
                     }
-                } catch {
-                    print("Error reading data from file \(fileURL): \(error)")
                 }
+                managerLogger.info("Finished processing stored files.")
             }
+        } catch let error as FileError {
+            managerLogger.critical("Error accessing Detections folder: \(error.localizedDescription)")
         } catch {
-            print("Error retrieving detections folder: \(error)")
+            managerLogger.critical("Unexpected error retrieving contents of Detections folder: \(error)")
         }
     }
     
@@ -439,22 +558,17 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     ///   - boxes: The bounding boxes of sensitive areas.
     /// - Returns: A new image with sensitive areas covered, or `nil` if processing fails.
     func coverSensitiveAreasWithBlackBox(in image: UIImage, boxes: [CGRect]) -> UIImage? {
-        // Convert the UIImage to a CIImage.
         guard let ciImage = CIImage(image: image) else { return nil }
         var outputImage = ciImage
         let context = CIContext(options: nil)
         
         for box in boxes {
-            // Create a black color image using CIConstantColorGenerator.
             guard let colorFilter = CIFilter(name: "CIConstantColorGenerator") else { continue }
-            // Create a CIColor for black.
             let blackColor = CIColor(color: .black)
             colorFilter.setValue(blackColor, forKey: kCIInputColorKey)
             
-            // Generate the black image and crop it to the box.
             guard let fullBlackImage = colorFilter.outputImage?.cropped(to: box) else { continue }
             
-            // Composite the black box over the current output image.
             if let compositeFilter = CIFilter(name: "CISourceOverCompositing") {
                 compositeFilter.setValue(fullBlackImage, forKey: kCIInputImageKey)
                 compositeFilter.setValue(outputImage, forKey: kCIInputBackgroundImageKey)
@@ -463,15 +577,12 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 }
             }
         }
-        
-        // Render the final output image.
         if let cgImage = context.createCGImage(outputImage, from: outputImage.extent) {
             return UIImage(cgImage: cgImage)
         }
-        
         return nil
     }
-
+    
     /// Draws rectangles around container areas in an image.
     /// - Parameters:
     ///   - image: The image to process.
@@ -483,11 +594,11 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         in image: UIImage,
         boxesPerObject: [String: [CGRect]],
         colors: [String: UIColor],
-        lineWidth: CGFloat = 3.0
+        lineWidth: CGFloat? = nil
     ) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: image.size)
+        let stroke = lineWidth ?? containerBoxLineWidth
         return renderer.image { context in
-            // Draw the image (assumed to be drawn in the top-left origin space)
             image.draw(at: .zero)
             
             for (label, boxes) in boxesPerObject {
@@ -504,51 +615,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                         height: box.size.height
                     )
                     context.cgContext.stroke(adjustedBox)
-                    // Optionally add text labels here.
                 }
             }
         }
-    }
-    
-    /// Blurs sensitive areas in an image.
-    /// - Parameters:
-    ///   - image: The image to process.
-    ///   - boxes: The bounding boxes of sensitive areas.
-    ///   - blurRadius: The radius of the blur effect (default is 20).
-    /// - Returns: A new image with sensitive areas blurred, or `nil` if processing fails.
-    func blurSensitiveAreas(in image: UIImage, boxes: [CGRect], blurRadius: Double = 20) -> UIImage? {
-        // Convert the UIImage to a CIImage.
-        guard let ciImage = CIImage(image: image) else { return nil }
-        var outputImage = ciImage
-        let context = CIContext(options: nil)
-        
-        for box in boxes {
-            // Crop the region to blur.
-            let cropped = outputImage.cropped(to: box)
-            
-            // Apply a Gaussian blur filter to the cropped area.
-            if let blurFilter = CIFilter(name: "CIGaussianBlur") {
-                blurFilter.setValue(cropped, forKey: kCIInputImageKey)
-                blurFilter.setValue(blurRadius, forKey: kCIInputRadiusKey)
-                guard let blurredCropped = blurFilter.outputImage else { continue }
-                // The blur filter may expand the image extent; crop back to the original box.
-                let blurredRegion = blurredCropped.cropped(to: box)
-                
-                // Composite the blurred region over the current output image.
-                if let compositeFilter = CIFilter(name: "CISourceOverCompositing") {
-                    compositeFilter.setValue(blurredRegion, forKey: kCIInputImageKey)
-                    compositeFilter.setValue(outputImage, forKey: kCIInputBackgroundImageKey)
-                    if let composited = compositeFilter.outputImage {
-                        outputImage = composited
-                    }
-                }
-            }
-        }
-        
-        // Render the final composited image.
-        if let cgImage = context.createCGImage(outputImage, from: outputImage.extent) {
-            return UIImage(cgImage: cgImage)
-        }
-        return nil
     }
 }
