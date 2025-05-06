@@ -24,10 +24,6 @@
 	<string>0.25</string>
 	<key>ContainerBoxLineWidth</key>
 	<string>3</string>
-	<key>ContainerConfidenceThreshold</key>
-	<string>0.25</string>
-	<key>ContainerIoUThreshold</key>
-	<string>0.45</string>
 	<key>DEVICE_ID</key>
 	<string>$(DEVICE_ID)</string>
 	<key>DEVICE_SAS_TOKEN</key>
@@ -44,18 +40,10 @@
 	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>MobileToiletConfidenceThreshold</key>
-	<string>0.25</string>
-	<key>MobileToiletIoUThreshold</key>
-	<string>0.45</string>
 	<key>NSCameraUsageDescription</key>
 	<string>The app needs access to your camera to detect containers.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>The app needs access to your location to collect metadata for object detection.</string>
-	<key>ScaffoldingConfidenceThreshold</key>
-	<string>0.25</string>
-	<key>ScaffoldingIoUThreshold</key>
-	<string>0.45</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -44,6 +44,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// The Azure IoT Hub host URL.
     private let iotHubHost: String
     
+    /// The confidence threshold for all model classes
+    private let confidenceThreshold: Double
+    
     /// The compression rate for captured frames
     private var frameCompressionQuality: Double
     
@@ -74,12 +77,10 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// Initializes the DetectionManager, loading the YOLO model and setting up video capture.
     override init() {
         // Use centralized configuration from AppConfiguration.
-        let config = AppConfiguration.shared
         // Fetch values from Info.plist
         let infoDict = Bundle.main.infoDictionary
-        self.lastConfidenceThreshold = Double(infoDict?["ConfidenceThreshold"] as? String ?? "0.25") ?? 0.25
-        self.lastIoUThreshold = Double(infoDict?["IoUThreshold"] as? String ?? "0.45") ?? 0.45
         self.iotHubHost = infoDict?["IoTHubHost"] as? String ?? "iothub-oor-ont-weu-itr-01.azure-devices.net"
+        self.confidenceThreshold = Double(infoDict?["ConfidenceThreshold"] as? String ?? "0.45") ?? 0.45
         self.frameCompressionQuality = Double(infoDict?["FrameCompressionQuality"] as? String ?? "0.5") ?? 0.5
         self.containerBoxLineWidth = CGFloat((infoDict?["ContainerBoxLineWidth"] as? String).flatMap(Double.init) ?? 3)
         
@@ -101,7 +102,11 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             let loadedModel = try yolov8m(configuration: modelConfig).model
             self.mlModel = loadedModel
             let vnModel = try VNCoreMLModel(for: loadedModel)
-            vnModel.featureProvider = config.staticThresholdProvider
+            let thresholdProvider = try MLDictionaryFeatureProvider(dictionary: [
+            "confidenceThreshold": MLFeatureValue(double: self.confidenceThreshold)
+            ])
+            print("Confidence threshold provider: \(thresholdProvider)")
+            vnModel.featureProvider = thresholdProvider
             self.detector = vnModel
             
             guard let model = self.mlModel else {
@@ -282,14 +287,14 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 }
                 if shouldProcess {
                     self.managerLogger.info("Object detected, processing frame...")
-                    self.processDetectedFrame(results: results)
+                    self.processDetectedFrame(results: results, targetClasses: targetClasses)
                 }
             }
         })
     }
     
     /// Handles processing after a container has been detected in a frame.
-    private func processDetectedFrame(results: [VNRecognizedObjectObservation]) {
+    private func processDetectedFrame(results: [VNRecognizedObjectObservation], targetClasses: [(name: String, enabled: Bool)]) {
         guard let pixelBuffer = self.lastPixelBufferForSaving else {
             managerLogger.critical("Error: Missing last pixel buffer for processing.")
             return
