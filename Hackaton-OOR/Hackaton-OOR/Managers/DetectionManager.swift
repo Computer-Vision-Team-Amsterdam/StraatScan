@@ -283,38 +283,15 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             return
         }
         
-        guard let results = request.results as? [VNRecognizedObjectObservation], !results.isEmpty else {
-            return
-        }
+        let results = (request.results as? [VNRecognizedObjectObservation]) ?? []
         
-        DispatchQueue.main.async(execute: {
-            if let results = request.results as? [VNRecognizedObjectObservation] {
-
-                let targetClasses: [(name: String, enabled: Bool)] = [
-                    ("container", UserDefaults.standard.bool(forKey: "detectContainers")),
-                    ("mobile toilet", UserDefaults.standard.bool(forKey: "detectMobileToilets")),
-                    ("scaffolding", UserDefaults.standard.bool(forKey: "detectScaffoldings"))
-                ]
-
-                // --- Step 1: Check if at least one enabled target is detected in the observations.
-                let shouldProcess = targetClasses.contains { (objectName, isEnabled) in
-                    return isEnabled && results.contains { observation in
-                        if let label = observation.labels.first?.identifier.lowercased() {
-                            return label == objectName
-                        }
-                        return false
-                    }
-                }
-                if shouldProcess {
-                    self.managerLogger.info("Object detected, processing frame...")
-                    self.processDetectedFrame(results: results, targetClasses: targetClasses)
-                }
-            }
-        })
+        DispatchQueue.main.async {
+            self.processFrame(results: results)
+        }
     }
     
     /// Handles processing after a container has been detected in a frame.
-    private func processDetectedFrame(results: [VNRecognizedObjectObservation], targetClasses: [(name: String, enabled: Bool)]) {
+    private func processFrame(results: [VNRecognizedObjectObservation]) {
         guard let pixelBuffer = self.lastPixelBufferForSaving else {
             managerLogger.critical("Error: Missing last pixel buffer for processing.")
             return
@@ -331,51 +308,45 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         // Define your sensitive classes.
         let sensitiveClasses: Set<String> = ["person", "license plate"]
         var sensitiveBoxes = [CGRect]()
-        var detectedBoxes: [String: [CGRect]] = [:]
-        var detectionCounts: [String: Int] = [:]
-        
-        // For each observation that is sensitive, convert its normalized bounding box to image coordinates.
-        // (Assume 'image' is created from your saved pixel buffer.)
-        if let pixelBuffer = self.lastPixelBufferForSaving,
-            var image = self.imageFromPixelBuffer(pixelBuffer: pixelBuffer) {
-            
-            let imageSize = image.size
-            for observation in results {
-                if let label = observation.labels.first?.identifier.lowercased() {
-                    let normRect = observation.boundingBox
-                    let rectInImage = VNImageRectForNormalizedRect(normRect, Int(imageSize.width), Int(imageSize.height))
-
-                    if targetClasses.contains(where: { $0.enabled && $0.name == label }) {
-                        detectedBoxes[label, default: []].append(rectInImage)
-                        detectionCounts[label, default: 0] += 1
-                    } else if sensitiveClasses.contains(label) {
-                        sensitiveBoxes.append(rectInImage)
-                    }
-                }
+        let imageSize = image.size
+        for obs in results {
+            if let label = obs.labels.first?.identifier.lowercased(),
+               sensitiveClasses.contains(label) {
+                let box = VNImageRectForNormalizedRect(
+                    obs.boundingBox,
+                    Int(imageSize.width),
+                    Int(imageSize.height)
+                )
+                sensitiveBoxes.append(box)
             }
-
-            let totalDetected = detectionCounts.values.reduce(0, +)
+        }
+        if !sensitiveBoxes.isEmpty,
+           let blurred = coverSensitiveAreasWithBlackBox(in: image, boxes: sensitiveBoxes) {
+            image = blurred
+        }
+        
+        // --- Step 3: Count target class detections.
+        let targetClasses: [(name: String, enabled: Bool)] = [
+           ("container",      UserDefaults.standard.bool(forKey: "detectContainers")),
+           ("mobile toilet",  UserDefaults.standard.bool(forKey: "detectMobileToilets")),
+           ("scaffolding",    UserDefaults.standard.bool(forKey: "detectScaffoldings"))
+        ]
+        let totalDetected = targetClasses
+            .filter { $0.enabled }
+            .reduce(0) { sum, tc in
+                sum + results.filter {
+                    $0.labels.first?.identifier.lowercased() == tc.name
+                }.count
+            }
+        if totalDetected > 0 {
             DispatchQueue.main.async {
                 self.objectsDetected += totalDetected
             }
-            
-            if !sensitiveBoxes.isEmpty,
-                let imageWithBlackBoxes = self.coverSensitiveAreasWithBlackBox(in: image, boxes: sensitiveBoxes) {
-                image = imageWithBlackBoxes
-            }
-
-            // If drawing bounding boxes is enabled, draw them on the image.
-            if UserDefaults.standard.bool(forKey: "drawBoundingBoxes") {
-                let colors: [String: UIColor] = [
-                    "container": .red,
-                    "mobile toilet": .blue,
-                    "scaffolding": .green
-                ]
-                image = self.drawSquaresAroundDetectedAreas(in: image, boxesPerObject: detectedBoxes, colors: colors)
-            }
-            self.deliverDetectionToAzure(image: image, predictions: results)
-            self.lastPixelBufferForSaving = nil
         }
+
+        // --- Step 5: Always save/upload image and potential detections.
+        self.deliverDetectionToAzure(image: image, predictions: results)
+        self.lastPixelBufferForSaving = nil
     }
     
     /// Converts a pixel buffer to a UIImage.
