@@ -72,6 +72,18 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     
     private var detectionTimer: Timer?
     
+    /// The frame rate being used to process frames by the model.
+    private lazy var frameRateFPS: Double = {
+        if let s = Bundle.main.object(forInfoDictionaryKey: "FrameRateFPS") as? String,
+           let v = Double(s) {
+            return v
+        }
+        return Bundle.main.object(forInfoDictionaryKey: "FrameRateFPS") as? Double ?? 2.0
+    }()
+    
+    /// The time interval between processed frames.
+    private var lastFrameTime: TimeInterval = 0
+    
     // MARK: - Initialization
     
     /// Initializes the DetectionManager, loading the YOLO model and setting up video capture.
@@ -229,6 +241,12 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     ///   - capture: The video capture instance.
     ///   - sampleBuffer: The captured video frame.
     func videoCapture(_ capture: VideoCapture, didCaptureVideoFrame sampleBuffer: CMSampleBuffer) {
+        // compute minimum seconds between frames and skip if too fast.
+        let now = Date().timeIntervalSince1970
+        let interval = 1.0 / frameRateFPS
+        guard now - lastFrameTime >= interval else { return }
+        lastFrameTime = now
+        
         // Only process if no other frame is currently being processed.
         if currentBuffer == nil, let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
            let request = visionRequest {

@@ -120,13 +120,6 @@ public class VideoCapture: NSObject {
         do {
             try captureDevice.lockForConfiguration()
 
-            // Set frame rate via Info.plist (key: FrameRateFPS)
-            let frameRateFPS = (Bundle.main.object(forInfoDictionaryKey: "FrameRateFPS") as? String)
-                .flatMap(Int.init) ?? 2
-            let desiredFrameDuration = CMTime(value: 1, timescale: CMTimeScale(frameRateFPS))
-            captureDevice.activeVideoMaxFrameDuration = desiredFrameDuration
-            captureDevice.activeVideoMinFrameDuration = desiredFrameDuration
-
             captureDevice.focusMode = .continuousAutoFocus
             captureDevice.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
             captureDevice.exposureMode = .continuousAutoExposure
