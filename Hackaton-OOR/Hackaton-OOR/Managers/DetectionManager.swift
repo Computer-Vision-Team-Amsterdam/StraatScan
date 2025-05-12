@@ -211,6 +211,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             managerLogger.warning("Video capture not configured yet. Delaying startDetection()...")
             // Optionally, schedule a retry after a short delay.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
                 self.startDetection()
             }
             return
@@ -232,6 +233,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         managerLogger.info("Detection stopped.")
         detectionTimer?.invalidate()
         detectionTimer = nil
+        UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
     
     // MARK: - VideoCaptureDelegate
@@ -381,11 +383,20 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// - Returns: A UIImage representation of the pixel buffer, or `nil` if conversion fails.
     func imageFromPixelBuffer(pixelBuffer: CVPixelBuffer) -> UIImage? {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
-        if let cgImage = context.createCGImage(ciImage, from: ciImage.extent) {
-            return UIImage(cgImage: cgImage)
+
+        let ciOrientation: CGImagePropertyOrientation
+        switch UIDevice.current.orientation {
+        case .landscapeLeft:      ciOrientation = .left
+        case .landscapeRight:     ciOrientation = .right
+        case .portraitUpsideDown: ciOrientation = .down
+        default:                  ciOrientation = .up
         }
-        return nil
+
+        let oriented = ciImage.oriented(ciOrientation)
+
+        let context = CIContext()
+        guard let cg = context.createCGImage(oriented, from: oriented.extent) else { return nil }
+        return UIImage(cgImage: cg)
     }
     
     enum FileError: Error {
