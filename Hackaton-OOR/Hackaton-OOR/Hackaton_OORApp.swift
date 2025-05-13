@@ -9,6 +9,7 @@ struct Hackaton_OORApp: App {
             "detectContainers": true,
             "detectMobileToilets": true,
             "detectScaffoldings": true,
+            "drawBoundingBoxes": false,
         ])
     }
 

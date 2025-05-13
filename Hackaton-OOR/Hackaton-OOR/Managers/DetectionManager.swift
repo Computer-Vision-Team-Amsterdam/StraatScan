@@ -69,7 +69,10 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     
     /// The total number of minutes the detection has been running.
     @Published var minutesRunning = 0
-    
+
+    /// Snapshot of the drawBoundingBoxes setting at detection start.
+    private var drawBoundingBoxes: Bool = false
+
     private var detectionTimer: Timer?
     
     // MARK: - Initialization
@@ -195,6 +198,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// Starts the object detection process.
     /// Ensures the video capture is configured before starting.
     func startDetection() {
+        self.drawBoundingBoxes = UserDefaults.standard.bool(forKey: "drawBoundingBoxes")
+        print("drawBoundingBoxes: \(self.drawBoundingBoxes)")
         guard isConfigured else {
             managerLogger.warning("Video capture not configured yet. Delaying startDetection()...")
             // Optionally, schedule a retry after a short delay.
@@ -345,7 +350,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             }
 
             // If drawing bounding boxes is enabled, draw them on the image.
-            if UserDefaults.standard.bool(forKey: "drawBoundingBoxes") {
+            if drawBoundingBoxes {
                 let colors: [String: UIColor] = [
                     "container": .red,
                     "mobile toilet": .blue,
