@@ -7,8 +7,9 @@ struct StraatScanApp: App {
     init() {
         UserDefaults.standard.register(defaults: [
             "detectContainers": true,
-            "iouThreshold": 0.45,
-            "confidenceThreshold": 0.25
+            "detectMobileToilets": true,
+            "detectScaffoldings": true,
+            "drawBoundingBoxes": false,
         ])
     }
 
