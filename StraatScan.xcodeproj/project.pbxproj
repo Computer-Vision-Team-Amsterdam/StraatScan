@@ -33,9 +33,22 @@
 		4FF468FB2D4CDFAF001733D8 /* StraatScanUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StraatScanUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		4FFD39422DD396AA00DC0E60 /* Exceptions for "StraatScan" folder in "StraatScan" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 4FF468E02D4CDFAC001733D8 /* StraatScan */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4FF468E32D4CDFAC001733D8 /* StraatScan */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				4FFD39422DD396AA00DC0E60 /* Exceptions for "StraatScan" folder in "StraatScan" target */,
+			);
 			path = StraatScan;
 			sourceTree = "<group>";
 		};
