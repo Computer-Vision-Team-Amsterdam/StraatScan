@@ -236,6 +236,17 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
     
+    /// Map UIDevice orientation → EXIF orientation for Vision
+    private func exifOrientationForCurrentDevice() -> CGImagePropertyOrientation {
+        switch UIDevice.current.orientation {
+        case .portrait:           return .up  // home button / gesture bar at bottom
+        case .portraitUpsideDown: return .down    // home button / gesture bar at top
+        case .landscapeLeft:      return .left   // home button on the right
+        case .landscapeRight:     return .right  // home button on the left
+        default:                  return .up   // assume portrait
+        }
+    }
+  
     // MARK: - VideoCaptureDelegate
     
     /// Processes each captured video frame for object detection.
@@ -258,9 +269,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             self.lastPixelBufferForSaving = pixelBuffer
             self.lastPixelBufferTimestamp = NSDate().timeIntervalSince1970
             
-            // Optionally, set the image orientation based on your needs.
-            // Here we use .up for simplicity.
-            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
+            let orientation = exifOrientationForCurrentDevice()
+            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: orientation, options: [:])
             do {
                 try handler.perform([request])
             } catch {
@@ -354,19 +364,10 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// - Returns: A UIImage representation of the pixel buffer, or `nil` if conversion fails.
     func imageFromPixelBuffer(pixelBuffer: CVPixelBuffer) -> UIImage? {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-
-        let ciOrientation: CGImagePropertyOrientation
-        switch UIDevice.current.orientation {
-        case .landscapeLeft:      ciOrientation = .left
-        case .landscapeRight:     ciOrientation = .right
-        case .portraitUpsideDown: ciOrientation = .down
-        default:                  ciOrientation = .up
-        }
-
-        let oriented = ciImage.oriented(ciOrientation)
+            .oriented(exifOrientationForCurrentDevice())
 
         let context = CIContext()
-        guard let cg = context.createCGImage(oriented, from: oriented.extent) else { return nil }
+        guard let cg = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
         return UIImage(cgImage: cg)
     }
     
