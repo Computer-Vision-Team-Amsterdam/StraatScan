@@ -204,6 +204,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             managerLogger.warning("Video capture not configured yet. Delaying startDetection()...")
             // Optionally, schedule a retry after a short delay.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                UIDevice.current.beginGeneratingDeviceOrientationNotifications()
                 self.startDetection()
             }
             return
@@ -225,6 +226,18 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         managerLogger.info("Detection stopped.")
         detectionTimer?.invalidate()
         detectionTimer = nil
+        UIDevice.current.endGeneratingDeviceOrientationNotifications()
+    }
+    
+    /// Map UIDevice orientation → EXIF orientation for Vision
+    private func exifOrientationForCurrentDevice() -> CGImagePropertyOrientation {
+        switch UIDevice.current.orientation {
+        case .portrait:           return .up  // home button / gesture bar at bottom
+        case .portraitUpsideDown: return .down    // home button / gesture bar at top
+        case .landscapeLeft:      return .left   // home button on the right
+        case .landscapeRight:     return .right  // home button on the left
+        default:                  return .up   // assume portrait
+        }
     }
     
     // MARK: - VideoCaptureDelegate
@@ -243,9 +256,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             self.lastPixelBufferForSaving = pixelBuffer
             self.lastPixelBufferTimestamp = NSDate().timeIntervalSince1970
             
-            // Optionally, set the image orientation based on your needs.
-            // Here we use .up for simplicity.
-            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
+            let orientation = exifOrientationForCurrentDevice()
+            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: orientation, options: [:])
             do {
                 try handler.perform([request])
             } catch {
@@ -368,11 +380,10 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// - Returns: A UIImage representation of the pixel buffer, or `nil` if conversion fails.
     func imageFromPixelBuffer(pixelBuffer: CVPixelBuffer) -> UIImage? {
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            .oriented(exifOrientationForCurrentDevice())
         let context = CIContext()
-        if let cgImage = context.createCGImage(ciImage, from: ciImage.extent) {
-            return UIImage(cgImage: cgImage)
-        }
-        return nil
+        guard let cg = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+        return UIImage(cgImage: cg)
     }
     
     enum FileError: Error {
