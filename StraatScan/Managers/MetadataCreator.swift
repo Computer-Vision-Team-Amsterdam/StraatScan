@@ -101,9 +101,12 @@ struct MetadataCreator {
             print(labelMapping)
             let objectClass = labelMapping[labelIdentifier] ?? MetadataCreator.unknownObjectClass
             
+            let x_center = prediction.boundingBox.origin.x + (prediction.boundingBox.width / 2)
+            let y_center = 1 - (prediction.boundingBox.origin.y + (prediction.boundingBox.height / 2))
+
             let bbOutput = BoundingBoxOutput(
-                x_center: prediction.boundingBox.origin.x,
-                y_center: prediction.boundingBox.origin.y,
+                x_center: x_center,
+                y_center: y_center,
                 width: prediction.boundingBox.width,
                 height: prediction.boundingBox.height
             )
