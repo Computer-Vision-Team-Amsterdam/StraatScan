@@ -67,11 +67,11 @@ struct StatusRows: View {
                 Text("Detect:")
                 Spacer()
                 Group {
-                    detectLabel(text: "containers", enabled: detectContainers)
+                    detectLabel(text: "containers", enabled: self.detectContainers)
                     Text(",")
-                    detectLabel(text: "mobile toilets", enabled: detectMobileToilets)
+                    detectLabel(text: "mobile toilets", enabled: self.detectMobileToilets)
                     Text(",")
-                    detectLabel(text: "scaffoldings", enabled: detectScaffoldings)
+                    detectLabel(text: "scaffoldings", enabled: self.detectScaffoldings)
                   }
             }
         }
@@ -119,10 +119,7 @@ struct DetectionStatsRows: View {
 }
 
 struct MainView: View {
-    @AppStorage("detectContainers") private var detectContainers: Bool = true
-    @AppStorage("detectMobileToilets") private var detectMobileToilets: Bool = true
-    @AppStorage("detectScaffoldings") private var detectScaffoldings: Bool = true
-    
+    @StateObject private var appSettings = AppSettings()
     @EnvironmentObject var iotManager: IoTDeviceManager
     @StateObject private var locationManager = LocationManager()
     @StateObject private var networkMonitor = NetworkMonitor()
@@ -139,7 +136,6 @@ struct MainView: View {
     @State private var showingStopConfirmation = false
     @State private var showCameraView: Bool = false
     @State private var isCameraAuthorized: Bool = false
-    @State private var showCameraAccessDeniedAlert: Bool = false
     
     private var isLocationAuthorized: Bool {
         // Accesses the authorizationStatus published by the locationManager instance
@@ -148,15 +144,15 @@ struct MainView: View {
     
     private var enabledObjects: String {
         let objects = [
-            detectContainers ? "containers" : nil,
-            detectMobileToilets ? "mobile toilets" : nil,
-            detectScaffoldings ? "scaffoldings" : nil
+            appSettings.detectContainers ? "containers" : nil,
+            appSettings.detectMobileToilets ? "mobile toilets" : nil,
+            appSettings.detectScaffoldings ? "scaffoldings" : nil
         ].compactMap { $0 }
         return objects.isEmpty ? "none" : objects.joined(separator: ", ")
     }
 
     private var areAnyObjectsEnabled: Bool {
-        detectContainers || detectMobileToilets || detectScaffoldings
+        appSettings.detectContainers || appSettings.detectMobileToilets || appSettings.detectScaffoldings
     }
     
     // Timer to check storage periodically
@@ -182,15 +178,9 @@ struct MainView: View {
                 landscapeLayout
             }
         }
-        .onAppear {
-            storageAvailable = getAvailableDiskSpace()
-            detectionManager.deliverFilesFromDocuments()
-            CameraManager.checkAndRequestCameraAccess { authorized in
-                isCameraAuthorized = authorized
-            }
-            if !isLocationAuthorized {
-                locationManager.requestAuthorization()
-            }
+        .onAppear(perform: checkPermissionsOnLoad)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            checkPermissionsOnLoad()
         }
         .onReceive(storageTimer) { _ in
             storageAvailable = getAvailableDiskSpace()
@@ -200,19 +190,11 @@ struct MainView: View {
                 detectionManager.deliverFilesFromDocuments()
             }
         }
-        .alert("Credential Error", isPresented: $iotManager.showingCredentialAlert) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(iotManager.credentialAlertMessage)
-        }
         .fullScreenCover(isPresented: $showCameraView) {
             CameraViewContainer(isCameraPresented: $showCameraView)
         }
-        .alert(isPresented: $showCameraAccessDeniedAlert) {
-            CameraManager.showCameraAccessDeniedAlert()
-        }
     }
-    
+
     /// UI portrait mode layout.
     private var portraitLayout: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -222,9 +204,9 @@ struct MainView: View {
             StatusRows(locationManager: locationManager,
                        networkMonitor: networkMonitor,
                        storageAvailable: storageAvailable,
-                       detectContainers: detectContainers,
-                       detectMobileToilets: detectMobileToilets,
-                       detectScaffoldings: detectScaffoldings)
+                       detectContainers: appSettings.detectContainers,
+                       detectMobileToilets: appSettings.detectMobileToilets,
+                       detectScaffoldings: appSettings.detectScaffoldings)
             Spacer()
             DetectionStatsRows(detectionManager: detectionManager,
                                 formattedTime: formattedTime)
@@ -244,9 +226,9 @@ struct MainView: View {
                 StatusRows(locationManager: locationManager,
                            networkMonitor: networkMonitor,
                            storageAvailable: storageAvailable,
-                           detectContainers: detectContainers,
-                           detectMobileToilets: detectMobileToilets,
-                           detectScaffoldings: detectScaffoldings)
+                           detectContainers: appSettings.detectContainers,
+                           detectMobileToilets: appSettings.detectMobileToilets,
+                           detectScaffoldings: appSettings.detectScaffoldings)
                 stopButton
             }
             .padding()
@@ -293,9 +275,9 @@ struct MainView: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 24, height: 24)
-                    .foregroundColor(isDetecting ? .gray : .blue)
+                    .foregroundColor(isDetecting || !isCameraAuthorized ? .gray : .blue)
             }
-            .disabled(isDetecting)
+            .disabled(isDetecting || !isCameraAuthorized)
         }
     }
     
@@ -327,7 +309,11 @@ struct MainView: View {
             }
         }
         .buttonStyle(DetectButtonStyle())
-        .disabled(isDetecting || !locationManager.isReceivingLocationUpdates || !areAnyObjectsEnabled)
+        .disabled(isDetecting
+                  || !locationManager.isReceivingLocationUpdates
+                  || !areAnyObjectsEnabled
+                  || !isCameraAuthorized)
+
     }
     
     /// Variable to align stop and start detection buttons next to eachother in portrait mode.
@@ -339,14 +325,24 @@ struct MainView: View {
         .frame(maxWidth: .infinity)
     }
     
+    private func checkPermissionsOnLoad() {
+        storageAvailable = getAvailableDiskSpace()
+        detectionManager.deliverFilesFromDocuments()
+        CameraManager.checkAndRequestPermissions { authorized in
+            self.isCameraAuthorized = authorized
+        }
+        if !isLocationAuthorized {
+            locationManager.requestAuthorization()
+        }
+    
+    }
+
     /// Function to check and request camera access when camera preview is tapped.
     private func authorizeAndShowCameraPreview() {
-        CameraManager.checkAndRequestCameraAccess { authorized in
+        CameraManager.checkAndRequestPermissions { authorized in
             isCameraAuthorized = authorized
             if authorized {
                 showCameraView = true
-            } else {
-                showCameraAccessDeniedAlert = true
             }
         }
     }
@@ -354,15 +350,13 @@ struct MainView: View {
     /// Function to start detection if camera is accessible, and otherwise asks for access.
     private func startDetectionIfPossible() {
         guard !isDetecting else { return }
-        CameraManager.checkAndRequestCameraAccess { authorized in
+        CameraManager.checkAndRequestPermissions { authorized in
             isCameraAuthorized = authorized
             if authorized {
                 DispatchQueue.main.async {
                     isDetecting = true
                     detectionManager.startDetection()
                 }
-            } else {
-                showCameraAccessDeniedAlert = true
             }
         }
     }

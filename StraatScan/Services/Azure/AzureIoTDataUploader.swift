@@ -2,7 +2,7 @@ import Foundation
 import Logging // For logging
 
 // MARK: - Custom Error Enum
-enum AzureIoTError: LocalizedError {
+enum AzureIoTError: AppError {
     case missingCredentials(String)
     case invalidURL(String)
     case requestEncodingError(Error)
@@ -13,6 +13,10 @@ enum AzureIoTError: LocalizedError {
     case blobUploadFailed(Error?)
     case notificationFailed(Error?)
 
+    var title: String {
+        return "Azure IoT Error"
+    }
+    
     var errorDescription: String? {
         switch self {
         case .missingCredentials(let credentialName):
@@ -33,6 +37,29 @@ enum AzureIoTError: LocalizedError {
             return "Azure IoT Error: Failed to upload data to blob storage. \(underlyingError?.localizedDescription ?? "")"
         case .notificationFailed(let underlyingError):
             return "Azure IoT Error: Failed to send upload notification to IoT Hub. \(underlyingError?.localizedDescription ?? "")"
+        }
+    }
+
+    var typeIdentifier: String {
+        switch self {
+        case .missingCredentials:
+            return "AzureIoTError.missingCredentials"
+        case .invalidURL:
+            return "AzureIoTError.invalidURL"
+        case .requestEncodingError:
+            return "AzureIoTError.requestEncodingError"
+        case .networkError:
+            return "AzureIoTError.networkError"
+        case .invalidHTTPResponse:
+            return "AzureIoTError.invalidHTTPResponse"
+        case .httpError:
+            return "AzureIoTError.httpError"
+        case .responseDecodingError:
+            return "AzureIoTError.responseDecodingError"
+        case .blobUploadFailed:
+            return "AzureIoTError.blobUploadFailed"
+        case .notificationFailed:
+            return "AzureIoTError.notificationFailed"
         }
     }
 }
@@ -88,12 +115,14 @@ class AzureIoTDataUploader {
         logger.info("Starting data upload process for blob: \(blobName)")
 
         guard let deviceId = iotDeviceManager.deviceId else {
-            logger.error("Upload failed: Device ID is missing.")
-            throw AzureIoTError.missingCredentials("Device ID")
+            let error = AzureIoTError.missingCredentials("Device Id")
+            logError(error, logger)
+            throw error
         }
         guard let sasToken = iotDeviceManager.deviceSasToken else {
-            logger.error("Upload failed: SAS Token is missing.")
-            throw AzureIoTError.missingCredentials("SAS Token")
+            let error = AzureIoTError.missingCredentials("SAS Token")
+            logError(error, logger)
+            throw error
         }
 
         var uploadInfo: FileUploadResponse
@@ -101,26 +130,17 @@ class AzureIoTDataUploader {
             logger.debug("Requesting file upload parameters...")
             uploadInfo = try await requestFileUpload(deviceId: deviceId, sasToken: sasToken, blobName: blobName)
             logger.info("Received file upload parameters. Correlation ID: \(uploadInfo.correlationId)")
-        } catch let error as AzureIoTError {
-            logger.error("Failed to request file upload parameters: \(error.localizedDescription)")
-            throw error
         } catch {
-            logger.error("An unexpected error occurred requesting file upload parameters: \(error.localizedDescription)")
-            throw AzureIoTError.networkError(error)
+            throw error
         }
 
         do {
             logger.debug("Uploading data to blob storage...")
             try await uploadToBlob(data: data, uploadResponse: uploadInfo)
             logger.info("Successfully uploaded data to blob storage.")
-        } catch let error as AzureIoTError {
-            logger.error("Failed to upload data to blob storage: \(error.localizedDescription)")
-            await notifyFileUploadAndLog(correlationId: uploadInfo.correlationId, deviceId: deviceId, sasToken: sasToken, isSuccess: false)
-            throw AzureIoTError.blobUploadFailed(error)
         } catch {
-             logger.error("An unexpected error occurred during blob upload: \(error.localizedDescription)")
-             await notifyFileUploadAndLog(correlationId: uploadInfo.correlationId, deviceId: deviceId, sasToken: sasToken, isSuccess: false)
-             throw AzureIoTError.blobUploadFailed(error)
+            await notifyFileUploadAndLog(correlationId: uploadInfo.correlationId, deviceId: deviceId, sasToken: sasToken, isSuccess: false)
+            throw error
         }
 
         logger.debug("Notifying IoT Hub of successful upload...")
@@ -140,7 +160,9 @@ class AzureIoTDataUploader {
         components.queryItems = [URLQueryItem(name: "api-version", value: apiVersion)]
 
         guard let url = components.url else {
-            throw AzureIoTError.invalidURL("file upload request")
+            let error = AzureIoTError.invalidURL("file upload request")
+            logError(error, logger)
+            throw error
         }
         logger.trace("URL: \(url.absoluteString)")
 
@@ -153,8 +175,10 @@ class AzureIoTDataUploader {
         let payload = ["blobName": blobName]
         do {
             request.httpBody = try JSONEncoder().encode(payload)
-        } catch {
-            throw AzureIoTError.requestEncodingError(error)
+        } catch let encodingError {
+            let error = AzureIoTError.requestEncodingError(encodingError)
+            logError(error, logger)
+            throw error
         }
         
         logger.trace("Sending file upload request...")
@@ -164,9 +188,10 @@ class AzureIoTDataUploader {
             let decoder = JSONDecoder()
             let uploadResponse = try decoder.decode(FileUploadResponse.self, from: data)
             return uploadResponse
-        } catch {
-            logger.error("Failed to decode FileUploadResponse. Data: \(String(data: data, encoding: .utf8) ?? "non-utf8 data")")
-            throw AzureIoTError.responseDecodingError(error, data)
+        } catch let decodingError {
+            let error = AzureIoTError.responseDecodingError(decodingError, data)
+            logError(error, logger)
+            throw error
         }
     }
 
@@ -176,9 +201,11 @@ class AzureIoTDataUploader {
         let blobUrlString = "https://\(uploadResponse.hostName)/\(uploadResponse.containerName)/\(uploadResponse.blobName)\(uploadResponse.sasToken)"
 
         guard let url = URL(string: blobUrlString) else {
-            throw AzureIoTError.invalidURL("blob upload target")
+            let error = AzureIoTError.invalidURL("blob upload target")
+            logError(error, logger)
+            throw error
         }
-         logger.trace("Blob URL: \(url.absoluteString)")
+        logger.trace("Blob URL: \(url.absoluteString)")
 
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
@@ -190,12 +217,15 @@ class AzureIoTDataUploader {
         let (_, response) = try await urlSession.upload(for: request, from: data)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw AzureIoTError.invalidHTTPResponse
+            let error = AzureIoTError.invalidHTTPResponse
+            logError(error, logger)
+            throw error
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-             logger.error("Blob upload HTTP error. Status: \(httpResponse.statusCode)")
-            throw AzureIoTError.httpError(statusCode: httpResponse.statusCode, message: "Blob upload failed.")
+            let error = AzureIoTError.httpError(statusCode: httpResponse.statusCode, message: "Blob upload failed.")
+            logError(error, logger)
+            throw error
         }
         logger.trace("Blob upload successful (HTTP \(httpResponse.statusCode)).")
     }
@@ -210,7 +240,9 @@ class AzureIoTDataUploader {
         components.queryItems = [URLQueryItem(name: "api-version", value: apiVersion)]
 
         guard let url = components.url else {
-            throw AzureIoTError.invalidURL("file upload notification")
+            let error = AzureIoTError.invalidURL("file upload notification")
+            logError(error, logger)
+            throw error
         }
         logger.trace("Notification URL: \(url.absoluteString)")
 
@@ -220,10 +252,10 @@ class AzureIoTDataUploader {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
 
         struct NotificationPayload: Encodable {
-             let correlationId: String
-             let isSuccess: Bool
-             let statusCode: Int
-             let statusDescription: String
+            let correlationId: String
+            let isSuccess: Bool
+            let statusCode: Int
+            let statusDescription: String
         }
         let payload = NotificationPayload(
             correlationId: correlationId,
@@ -234,8 +266,10 @@ class AzureIoTDataUploader {
 
         do {
             request.httpBody = try JSONEncoder().encode(payload)
-        } catch {
-            throw AzureIoTError.requestEncodingError(error)
+        } catch let encodingError {
+            let error = AzureIoTError.requestEncodingError(encodingError)
+            logError(error, logger)
+            throw error
         }
 
         logger.trace("Sending file upload notification...")
@@ -249,39 +283,43 @@ class AzureIoTDataUploader {
             let (data, response) = try await urlSession.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
-                 logger.error("Invalid HTTP response received for \(description).")
-                throw AzureIoTError.invalidHTTPResponse
+                let error = AzureIoTError.invalidHTTPResponse
+                logError(error, logger)
+                throw error
             }
 
             guard (200...299).contains(httpResponse.statusCode) else {
-                 logger.error("\(description.capitalized) failed. Status: \(httpResponse.statusCode). Data: \(String(data: data, encoding: .utf8) ?? "non-utf8 data")")
-                throw AzureIoTError.httpError(statusCode: httpResponse.statusCode, message: "\(description.capitalized) failed.")
+                let error = AzureIoTError.httpError(statusCode: httpResponse.statusCode, message: "\(description.capitalized) failed.")
+                logError(error, logger)
+                throw error
             }
 
             return (data, httpResponse)
         } catch let error as AzureIoTError {
             throw error
         } catch {
-             logger.error("Network error during \(description): \(error.localizedDescription)")
-            throw AzureIoTError.networkError(error)
+            let networkError = AzureIoTError.networkError(error)
+            logError(networkError, logger)
+            throw networkError
         }
     }
     
     /// Convenience wrapper for notifying IoT Hub that handles potential errors during notification itself.
     private func notifyFileUploadAndLog(correlationId: String, deviceId: String, sasToken: String, isSuccess: Bool) async {
-         let statusCode = isSuccess ? 200 : 500
-         let statusDescription = isSuccess ? "Success" : "Failure reported by client"
-         do {
-             try await notifyFileUpload(
-                 correlationId: correlationId,
-                 deviceId: deviceId,
-                 sasToken: sasToken,
-                 isSuccess: isSuccess,
-                 statusCode: statusCode,
-                 statusDescription: statusDescription
-             )
-         } catch {
-             logger.error("Failed to send file upload notification to IoT Hub: \(error.localizedDescription)")
-         }
-     }
+        let statusCode = isSuccess ? 200 : 500
+        let statusDescription = isSuccess ? "Success" : "Failure reported by client"
+        do {
+            try await notifyFileUpload(
+                correlationId: correlationId,
+                deviceId: deviceId,
+                sasToken: sasToken,
+                isSuccess: isSuccess,
+                statusCode: statusCode,
+                statusDescription: statusDescription
+            )
+        } catch {
+            let notificationError = AzureIoTError.notificationFailed(error)
+            logError(notificationError, logger)
+        }
+    }
 }
