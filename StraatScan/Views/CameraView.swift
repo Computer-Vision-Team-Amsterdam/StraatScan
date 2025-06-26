@@ -35,68 +35,53 @@ struct CameraPreviewRepresentable: UIViewControllerRepresentable {
 
 // MARK: - UIKit Camera Preview Controller
 class CameraPreviewController: UIViewController {
-    var captureSession: AVCaptureSession!
-    var videoPreviewLayer: AVCaptureVideoPreviewLayer!
     private let logger = Logger(label: "nl.amsterdam.cvt.straatscan.CameraPreviewController")
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-
-        // Set up the capture session.
-        captureSession = AVCaptureSession()
-        captureSession.sessionPreset = .high
         
-        guard let videoDevice = AVCaptureDevice.default(for: .video),
-              let videoInput = try? AVCaptureDeviceInput(device: videoDevice),
-              captureSession.canAddInput(videoInput) else {
-            logger.error("Failed to get video device input.")
-            CameraManager.presentVideoInputErrorAlert(on: self)
+        let detectionManager = DetectionManager.shared
+        
+        guard let previewLayer = detectionManager.videoCapture?.previewLayer else {
+            logger.critical("Could not get previewLayer from DetectionManager. The video capture might not be configured.")
+            // Use our global error handler to notify the user.
+            CameraManager.logVideoInputError()
             return
         }
-        captureSession.addInput(videoInput)
         
-        // Set up the preview layer.
-        videoPreviewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
-        videoPreviewLayer.videoGravity = .resizeAspectFill
-        view.layer.addSublayer(videoPreviewLayer)
+        previewLayer.frame = view.bounds
+        previewLayer.videoGravity = .resizeAspectFill
+        view.layer.addSublayer(previewLayer)
         
-        // Start running the session asynchronously.
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-            self.captureSession.startRunning()
+        logger.info("CameraPreviewController successfully configured with DetectionManager's preview layer.")
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        logger.info("Camera preview is appearing. Starting video session.")
+        DetectionManager.shared.videoCapture?.start()
+    }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        logger.info("Camera preview is disappearing.")
+        if !DetectionManager.shared.isDetectingForUpload {
+            logger.info("Stopping video session as no detection is active.")
+            DetectionManager.shared.videoCapture?.stop()
+        } else {
+            logger.info("Keeping video session running because a detection is active.")
         }
     }
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        videoPreviewLayer.frame = view.bounds
-        updateVideoOrientation()
+        view.layer.sublayers?.first?.frame = view.bounds
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         coordinator.animate { _ in
-            self.videoPreviewLayer.frame = self.view.bounds
-            self.updateVideoOrientation()
-        }
-    }
-    
-    private func updateVideoOrientation() {
-        guard let connection = videoPreviewLayer.connection else { return }
-        
-        let orientation = UIDevice.current.orientation
-        
-        switch orientation {
-        case .portrait:
-            connection.videoRotationAngle = 90
-        case .portraitUpsideDown:
-            connection.videoRotationAngle = 270
-        case .landscapeLeft:
-            connection.videoRotationAngle = 0
-        case .landscapeRight:
-            connection.videoRotationAngle = 180
-        default:
-            connection.videoRotationAngle = 90
+            self.view.layer.sublayers?.first?.frame = self.view.bounds
         }
     }
 }

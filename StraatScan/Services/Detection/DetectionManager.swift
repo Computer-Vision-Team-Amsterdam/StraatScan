@@ -5,6 +5,106 @@ import Vision
 import UIKit
 import Logging
 
+// Define the specific errors for the DetectionManager
+enum DetectionError: AppError {
+    case ioTHubHostMissing
+    case modelLoadingFailed(Error)
+    case modelMetadataInvalid(String)
+    case visionRequestSetupFailed
+    case videoCaptureSetupFailed
+    case pixelBufferConversionFailed
+    case pixelBufferMissing
+    case documentsFolderNotFound
+    case fileOperationFailed(String, Error)
+    case uploaderNotInitialized
+    case imageEncodingFailed
+    case metadataSerializationFailed(Error)
+    case visionRequestFailed(Error)
+
+    var title: String {
+        switch self {
+        case .ioTHubHostMissing:
+            return "Configuration Error"
+        case .modelLoadingFailed, .modelMetadataInvalid, .visionRequestSetupFailed:
+            return "Model Setup Error"
+        case .videoCaptureSetupFailed:
+            return "Camera Error"
+        case .pixelBufferConversionFailed, .pixelBufferMissing, .imageEncodingFailed:
+            return "Image Processing Error"
+        case .documentsFolderNotFound, .fileOperationFailed:
+            return "File System Error"
+        case .uploaderNotInitialized:
+            return "Network Error"
+        case .metadataSerializationFailed:
+            return "Data Error"
+        case .visionRequestFailed:
+            return "Detection Error"
+        }
+    }
+
+    var errorDescription: String? {
+        switch self {
+        case .ioTHubHostMissing:
+            return "The Azure IoT Hub host URL is missing from the app's configuration. Upload functionality is disabled."
+        case .modelLoadingFailed(let underlyingError):
+            return "Failed to load the CoreML model. The app cannot perform detections. Reason: \(underlyingError.localizedDescription)"
+        case .modelMetadataInvalid(let reason):
+            return "The CoreML model's metadata is invalid or missing required keys. Class names may not be available. Reason: \(reason)"
+        case .visionRequestSetupFailed:
+            return "Failed to create the Vision request from the CoreML model. Detection will not work."
+        case .videoCaptureSetupFailed:
+            return "Failed to initialize the video capture session. Please check camera permissions and try again."
+        case .pixelBufferConversionFailed:
+            return "Failed to convert a captured video frame into an image for processing."
+        case .pixelBufferMissing:
+            return "The system tried to process a frame, but the captured video buffer was missing."
+        case .documentsFolderNotFound:
+            return "Could not find or create the local 'Detections' folder to save files."
+        case .fileOperationFailed(let operation, let underlyingError):
+            return "A file system operation failed: \(operation). Reason: \(underlyingError.localizedDescription)"
+        case .uploaderNotInitialized:
+            return "The data uploader is not available. Files will be saved locally for later upload."
+        case .imageEncodingFailed:
+            return "Could not convert the processed image to JPEG data for uploading."
+        case .metadataSerializationFailed(let underlyingError):
+            return "Failed to serialize detection metadata to JSON format. Reason: \(underlyingError.localizedDescription)"
+        case .visionRequestFailed(let underlyingError):
+            return "The object detection request failed. Reason: \(underlyingError.localizedDescription)"
+        }
+    }
+
+    var typeIdentifier: String {
+        switch self {
+        case .ioTHubHostMissing:
+            return "DetectionError.ioTHubHostMissing"
+        case .modelLoadingFailed:
+            return "DetectionError.modelLoadingFailed"
+        case .modelMetadataInvalid:
+            return "DetectionError.modelMetadataInvalid"
+        case .visionRequestSetupFailed:
+            return "DetectionError.visionRequestSetupFailed"
+        case .videoCaptureSetupFailed:
+            return "DetectionError.videoCaptureSetupFailed"
+        case .pixelBufferConversionFailed:
+            return "DetectionError.pixelBufferConversionFailed"
+        case .pixelBufferMissing:
+            return "DetectionError.pixelBufferMissing"
+        case .documentsFolderNotFound:
+            return "DetectionError.documentsFolderNotFound"
+        case .fileOperationFailed:
+            return "DetectionError.fileOperationFailed"
+        case .uploaderNotInitialized:
+            return "DetectionError.uploaderNotInitialized"
+        case .imageEncodingFailed:
+            return "DetectionError.imageEncodingFailed"
+        case .metadataSerializationFailed:
+            return "DetectionError.metadataSerializationFailed"
+        case .visionRequestFailed:
+            return "DetectionError.visionRequestFailed"
+        }
+    }
+}
+
 /// A singleton manager that encapsulates video capture and YOLO-based object detection.
 class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     // MARK: - Dependencies
@@ -18,7 +118,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     private let managerLogger = Logger(label: "nl.amsterdam.cvt.straatscan.DetectionManager")
     
     /// Handles video capture from the device's camera.
-    private var videoCapture: VideoCapture?
+    var videoCapture: VideoCapture?
     
     /// The Vision request for performing object detection using the CoreML model.
     private var visionRequest: VNCoreMLRequest?
@@ -58,11 +158,15 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     
     // MARK: - Published properties
     
+    /// Indicates if a formal detection for uploading is in progress.
+    @Published private(set) var isDetectingForUpload: Bool = false
+    
     /// The number of objects detected.
     @Published var objectsDetected = 0
     
     /// The total number of images processed.
     @Published var totalImages = 0
+    private var checkedImagesFromFolder: Bool = false
     
     /// The total number of images successfully delivered to Azure.
     @Published var imagesDelivered = 0
@@ -104,9 +208,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         if !self.iotHubHost.isEmpty {
             self.uploader = AzureIoTDataUploader(host: self.iotHubHost, iotDeviceManager: self.iotManager)
         } else {
-            // Log critical error if host is missing - uploader cannot function
-            managerLogger.critical("IoTHubHost key is missing or empty in Info.plist. AzureIoTDataUploader cannot be initialized.")
-            self.iotManager.notifyUserOfCredentialError(message: "IoT Hub configuration is missing. Upload functionality disabled.")
+            logError(DetectionError.ioTHubHostMissing, managerLogger)
         }
         
         // 1. Load the YOLO model.
@@ -147,7 +249,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                         return name.isEmpty ? nil : String(name)
                     }
                     if names.isEmpty {
-                        managerLogger.critical("Parsing the dictionary-like 'names' string resulted in an empty array. Check raw string format. Raw: \"\(namesString)\". Mapping will be empty.")
+                        logError(DetectionError.modelMetadataInvalid("Parsing 'names' string resulted in an empty array."), managerLogger)
                     } else {
                         var generatedMapping: [String: Int] = [:]
                         for (index, name) in names.enumerated() {
@@ -160,19 +262,19 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 
             } else {
                 if metadata[MLModelMetadataKey.creatorDefinedKey] == nil {
-                    managerLogger.critical("Model metadata does not contain creatorDefinedKey ('\(MLModelMetadataKey.creatorDefinedKey)'). Mapping will be empty.")
+                    logError(DetectionError.modelMetadataInvalid("Model metadata does not contain creatorDefinedKey"), managerLogger)
                 } else if (metadata[MLModelMetadataKey.creatorDefinedKey] as? [String: Any]) == nil {
-                    managerLogger.critical("Value for creatorDefinedKey is not [String: Any]. Actual type: \(type(of: metadata[MLModelMetadataKey.creatorDefinedKey]!)). Mapping will be empty.")
+                    logError(DetectionError.modelMetadataInvalid("Value for creatorDefinedKey is not [String: Any]"), managerLogger)
                 } else if (metadata[MLModelMetadataKey.creatorDefinedKey] as! [String: Any])["names"] == nil {
-                    managerLogger.critical("Creator metadata dictionary does not contain key 'names'. Mapping will be empty.")
+                    logError(DetectionError.modelMetadataInvalid("Creator metadata dictionary does not contain key 'names'."), managerLogger)
                 } else if (metadata[MLModelMetadataKey.creatorDefinedKey] as! [String: Any])["names"] as? String == nil {
-                    managerLogger.critical("Value for key 'names' is not a String. Actual type: \(type(of: (metadata[MLModelMetadataKey.creatorDefinedKey] as! [String: Any])["names"]!)). Mapping will be empty.")
+                    logError(DetectionError.modelMetadataInvalid("Value for key 'names' is not a String."), managerLogger)
                 } else {
-                    managerLogger.critical("Could not extract 'names' string from model metadata for unknown reason. Mapping will be empty.")
+                    logError(DetectionError.modelMetadataInvalid("Could not extract 'names' string from model metadata for unknown reason."), managerLogger)
                 }
             }
         } catch {
-            managerLogger.critical("Error loading model or processing metadata: \(error)")
+            logError(DetectionError.modelLoadingFailed(error), managerLogger)
         }
         
         // 2. Create the Vision request.
@@ -182,10 +284,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             })
             // Set the option for cropping/scaling (adjust as needed).
             visionRequest?.imageCropAndScaleOption = .scaleFill
-        } else if self.mlModel != nil {
-            managerLogger.critical("Error: Failed to create VNCoreMLModel from loaded MLModel.")
         } else {
-            managerLogger.critical("Error: MLModel not loaded, cannot create Vision request.")
+            logError(DetectionError.visionRequestSetupFailed, managerLogger)
         }
         
         // 3. Set up video capture.
@@ -197,10 +297,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 self.managerLogger.info("Video capture setup successful.")
                 self.isConfigured = true
             } else {
-                self.managerLogger.critical("Video capture setup failed.")
-                DispatchQueue.main.async {
-                    self.iotManager.notifyUserOfCredentialError(message: "Failed to initialize video capture. Detection may not work.")
-                }
+                logError(DetectionError.videoCaptureSetupFailed, self.managerLogger)
             }
         }
     }
@@ -221,6 +318,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             }
             return
         }
+        self.isDetectingForUpload = true
         videoCapture?.start()
         managerLogger.info("Detection started.")
         detectionTimer?.invalidate()
@@ -235,6 +333,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// Stops the object detection process and invalidates the detection timer.
     func stopDetection() {
         videoCapture?.stop()
+        self.isDetectingForUpload = false
         managerLogger.info("Detection stopped.")
         detectionTimer?.invalidate()
         detectionTimer = nil
@@ -279,7 +378,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             do {
                 try handler.perform([request])
             } catch {
-                managerLogger.critical("Error performing Vision request: \(error)")
+                logError(DetectionError.visionRequestFailed(error), managerLogger)
             }
             // Reset the currentBuffer so that you can process the next frame.
             currentBuffer = nil
@@ -294,7 +393,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     ///   - error: An optional error if the request failed.
     func processObservations(for request: VNRequest, error: Error?) {
         if let error = error {
-            managerLogger.critical("Vision request failed with error: \(error.localizedDescription)")
+            logError(DetectionError.visionRequestFailed(error), managerLogger)
             return
         }
         
@@ -331,13 +430,13 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// Handles processing after a container has been detected in a frame.
     private func processDetectedFrame(results: [VNRecognizedObjectObservation], targetClasses: [(name: String, enabled: Bool)]) {
         guard let pixelBuffer = self.lastPixelBufferForSaving else {
-            managerLogger.critical("Error: Missing last pixel buffer for processing.")
+            logError(DetectionError.pixelBufferMissing, managerLogger)
             return
         }
         
         // Convert buffer to image (can fail)
         guard var image = self.imageFromPixelBuffer(pixelBuffer: pixelBuffer) else {
-            managerLogger.critical("Error: Failed to convert pixel buffer to image.")
+            logError(DetectionError.pixelBufferConversionFailed, managerLogger)
             self.lastPixelBufferForSaving = nil // Clear buffer if conversion failed
             return
         }
@@ -415,9 +514,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     func getDetectionsFolder() throws -> URL {
         // Locate the "Detections" folder in the app’s Documents directory.
         guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            let message = "Could not locate Documents folder."
-            managerLogger.critical("\(message)")
-            throw FileError.documentsFolderNotFound(message)
+            let error = DetectionError.documentsFolderNotFound
+            logError(error, managerLogger)
+            throw error
         }
         let detectionsFolderURL = documentsURL.appendingPathComponent("Detections")
         
@@ -426,9 +525,10 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             do {
                 try FileManager.default.createDirectory(at: detectionsFolderURL, withIntermediateDirectories: true, attributes: nil)
                 managerLogger.info("Created Detections folder at: \(detectionsFolderURL.path)")
-            } catch {
-                managerLogger.critical("Error creating folder: \(error.localizedDescription)")
-                throw FileError.documentsFolderNotFound("Error creating folder: \(error.localizedDescription)")
+            } catch let creationError {
+                let error = DetectionError.fileOperationFailed("Create Detections folder", creationError)
+                logError(error, managerLogger)
+                throw error
             }
         }
         return detectionsFolderURL
@@ -455,7 +555,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             let blobName = "\(fileNameBase).jpg"
             
             guard let uploader = self.uploader else {
-                managerLogger.critical("Error: AzureIoTDataUploader not initialized. Cannot deliver detection.")
+                logError(DetectionError.uploaderNotInitialized, managerLogger)
                 saveFileLocally(data: imageData, filename: blobName)
                 return
             }
@@ -470,12 +570,11 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                     }
                     managerLogger.info("Image \(blobName) uploaded successfully!")
                 } catch {
-                    managerLogger.critical("Image upload failed for \(blobName): \(error.localizedDescription)")
                     saveFileLocally(data: imageData, filename: blobName)
                 }
             }
         } else {
-            managerLogger.critical("Error: Could not get JPEG data from processed image.")
+            logError(DetectionError.imageEncodingFailed, managerLogger)
         }
         
         // --- Upload Metadata ---
@@ -515,12 +614,11 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                     try await uploader?.uploadData(jsonData, blobName: blobName)
                     managerLogger.info("Metadata \(blobName) uploaded successfully!")
                 } catch {
-                    managerLogger.critical("Metadata upload failed for \(blobName): \(error.localizedDescription)")
                     saveFileLocally(data: jsonData, filename: blobName)
                 }
             }
         } catch {
-            managerLogger.critical("Error serializing metadata: \(error)")
+            logError(DetectionError.metadataSerializationFailed(error), managerLogger)
         }
     }
     
@@ -532,16 +630,16 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             try data.write(to: fileURL)
             managerLogger.info("Saved file locally at \(fileURL.path)")
         } catch let error as FileError {
-            managerLogger.critical("Error saving file \(filename) locally: \(error.localizedDescription)")
+            logError(DetectionError.fileOperationFailed(filename, error), managerLogger)
         } catch {
-            managerLogger.critical("Unexpected error saving file \(filename) locally: \(error)")
+            logError(DetectionError.fileOperationFailed(filename, error), managerLogger)
         }
     }
     
     /// Uploads any remaining files in the "Detections" folder to Azure IoT Hub.
     func deliverFilesFromDocuments() {
         guard let uploader = self.uploader else {
-            managerLogger.critical("Error: AzureIoTDataUploader not initialized. Cannot deliver stored files.")
+            logError(DetectionError.uploaderNotInitialized, managerLogger)
             return
         }
         
@@ -556,8 +654,11 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             }
             
             managerLogger.info("Found \(fileURLs.count) pending files to upload.")
-            DispatchQueue.main.async {
-                self.totalImages += fileURLs.count
+            if !checkedImagesFromFolder {
+                DispatchQueue.main.async {
+                    self.totalImages += fileURLs.count
+                }
+                checkedImagesFromFolder = true
             }
             
             Task { [weak self] in
@@ -576,16 +677,12 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                         DispatchQueue.main.async {
                             self.imagesDelivered += 1
                         }
-                    } catch let error as AzureIoTError {
-                        managerLogger.critical("Error uploading stored file \(blobName): \(error.localizedDescription)")
                     } catch {
-                        managerLogger.critical("Error processing or uploading stored file \(blobName): \(error)")
+                        self.managerLogger.critical("Failed to process and clear stored file \(blobName). It will be retried later.")
                     }
                 }
                 managerLogger.info("Finished processing stored files.")
             }
-        } catch let error as FileError {
-            managerLogger.critical("Error accessing Detections folder: \(error.localizedDescription)")
         } catch {
             managerLogger.critical("Unexpected error retrieving contents of Detections folder: \(error)")
         }
