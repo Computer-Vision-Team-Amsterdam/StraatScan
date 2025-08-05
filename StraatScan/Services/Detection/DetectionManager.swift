@@ -487,7 +487,27 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 ]
                 image = self.drawSquaresAroundDetectedAreas(in: image, boxesPerObject: detectedBoxes, colors: colors)
             }
-            self.deliverDetectionToAzure(image: image, predictions: results)
+            
+            // Get list of target class names
+            var targetClassNames: [String] = []
+            for (objectName, isEnabled) in targetClasses {
+                if isEnabled {
+                    targetClassNames.append(objectName)
+                }
+            }
+            
+            // filter predictions belonging to target classes
+            var targetPredictions: [VNRecognizedObjectObservation] = []
+            for prediction in results {
+                guard let className = prediction.labels.first?.identifier.lowercased() else {
+                    continue
+                }
+                if targetClassNames.contains(className) {
+                    targetPredictions.append(prediction)
+                }
+            }
+            
+            self.deliverDetectionToAzure(image: image, predictions: targetPredictions)
             self.lastPixelBufferForSaving = nil
         }
     }
@@ -545,14 +565,19 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         }
         
         // Generate filename base
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyyMMdd_HHmmssSSS"
-        let dateString = dateFormatter.string(from: Date())
-        let fileNameBase = "detection_\(dateString)"
+        let fileDateFormatter = DateFormatter()
+        fileDateFormatter.dateFormat = "yyyyMMdd_HHmmssSSS"
+        let fileDateString = fileDateFormatter.string(from: Date())
+        let fileNameBase = "detection_\(fileDateString)"
+        
+        // Genarate date subfolder name
+        let folderDateFormatter = DateFormatter()
+        folderDateFormatter.dateFormat = "yyyy-MM-dd"
+        let folderName = folderDateFormatter.string(from: Date())
         
         // --- Upload Image ---
         if let imageData = image.jpegData(compressionQuality: self.frameCompressionQuality) {
-            let blobName = "\(fileNameBase).jpg"
+            let blobName = "images/\(folderName)/\(fileNameBase).jpg"
             
             guard let uploader = self.uploader else {
                 logError(DetectionError.uploaderNotInitialized, managerLogger)
@@ -606,7 +631,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted
             let jsonData = try encoder.encode(metadataObject)
-            let blobName = "\(fileNameBase).json"
+            let blobName = "detection_metadata/\(folderName)/\(fileNameBase).json"
             
             Task {
                 do {
@@ -626,9 +651,18 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     private func saveFileLocally(data: Data, filename: String) {
         do {
             let detectionsFolderURL = try self.getDetectionsFolder()
-            let fileURL = detectionsFolderURL.appendingPathComponent(filename)
-            try data.write(to: fileURL)
-            managerLogger.info("Saved file locally at \(fileURL.path)")
+            let blobFileURL = URL(fileURLWithPath: detectionsFolderURL.path + "/" + filename)
+            
+            // Ensure the folder structure exists.
+            let blobDirUrl = blobFileURL.deletingLastPathComponent()
+            if !FileManager.default.fileExists(atPath: blobDirUrl.path) {
+                try FileManager.default.createDirectory(at: blobDirUrl, withIntermediateDirectories: true, attributes: nil)
+                managerLogger.info("Created folder at: \(blobDirUrl.path)")
+                
+                
+                try data.write(to: blobFileURL)
+                managerLogger.info("Saved file locally at \(blobFileURL.path)")
+            }
         } catch let error as FileError {
             logError(DetectionError.fileOperationFailed(filename, error), managerLogger)
         } catch {
@@ -645,9 +679,21 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         
         do {
             let detectionsFolderURL = try self.getDetectionsFolder()
-            let fileURLs = try FileManager.default.contentsOfDirectory(at: detectionsFolderURL,
-                                                                       includingPropertiesForKeys: nil,
-                                                                       options: [.skipsHiddenFiles])
+
+            var fileURLs = [URL]()
+            if let enumerator = FileManager.default.enumerator(at: detectionsFolderURL, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
+                for case let fileURL as URL in enumerator {
+                    do {
+                        let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey])
+                        if fileAttributes.isRegularFile! {
+                            fileURLs.append(fileURL)
+                        }
+                    } catch {
+                        logError(DetectionError.fileOperationFailed(fileURL.path, error), managerLogger)
+                    }
+                }
+            }
+            
             if fileURLs.isEmpty {
                 managerLogger.info("No pending files found in Detections folder.")
                 return
@@ -664,8 +710,13 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             Task { [weak self] in
                 guard let self = self else { return }
                 for fileURL in fileURLs {
-                    let blobName = fileURL.lastPathComponent
                     do {
+                        let baseFolderURL = try self.getDetectionsFolder()
+                        guard let blobName = self.relativePath(to: fileURL, from: baseFolderURL) else {
+                            self.managerLogger.critical("Failed to generate relative path to \(fileURL.path) from \(baseFolderURL.path).")
+                            return
+                        }
+                        
                         let fileData = try Data(contentsOf: fileURL)
                         managerLogger.info("Attempting to upload stored file: \(blobName)")
                         try await uploader.uploadData(fileData, blobName: blobName)
@@ -678,7 +729,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                             self.imagesDelivered += 1
                         }
                     } catch {
-                        self.managerLogger.critical("Failed to process and clear stored file \(blobName). It will be retried later.")
+                        self.managerLogger.critical("Failed to process and clear stored file \(fileURL.path). It will be retried later.")
                     }
                 }
                 managerLogger.info("Finished processing stored files.")
@@ -686,6 +737,38 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         } catch {
             managerLogger.critical("Unexpected error retrieving contents of Detections folder: \(error)")
         }
+    }
+
+    func relativePath(to path: URL, from base: URL) -> String? {
+        // From https://stackoverflow.com/a/56054033
+        
+        // Ensure that both URLs represent files:
+        guard path.isFileURL && base.isFileURL else {
+            return nil
+        }
+
+        //this is the new part, clearly, need to use workBase in lower part
+        var workBase = base
+        if workBase.pathExtension != "" {
+            workBase = workBase.deletingLastPathComponent()
+        }
+
+        // Remove/replace "." and "..", make paths absolute:
+        let destComponents = path.standardized.resolvingSymlinksInPath().pathComponents
+        let baseComponents = workBase.standardized.resolvingSymlinksInPath().pathComponents
+
+        // Find number of common path components:
+        var i = 0
+        while i < destComponents.count &&
+              i < baseComponents.count &&
+              destComponents[i] == baseComponents[i] {
+                i += 1
+        }
+
+        // Build relative path:
+        var relComponents = Array(repeating: "..", count: baseComponents.count - i)
+        relComponents.append(contentsOf: destComponents[i...])
+        return relComponents.joined(separator: "/")
     }
     
     /// Covers sensitive areas in an image with black boxes.

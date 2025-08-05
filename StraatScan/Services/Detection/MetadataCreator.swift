@@ -29,16 +29,31 @@ struct DetectionOutput: Codable {
     let boundingBox: BoundingBoxOutput
 }
 
+struct ProjectInfo: Codable {
+    let model_name: String
+    let aml_model_version: Int
+    let project_version: String
+    let customer: String
+}
+
 struct MetadataOutput: Codable {
     let record_timestamp: String
     let gps_data: GPSDataOutput?
     let image_file_timestamp: String
     let image_file_name: String
     let detections: [DetectionOutput]
+    let project: ProjectInfo?
 }
 
 
 struct MetadataCreator {
+    private static let default_project_info = ProjectInfo(
+        model_name: "yolov8m_1280_v2.2_curious_hill_12.pt",
+        aml_model_version: 2,
+        project_version: "StraatScan_v1.0",
+        customer: "CVT"
+    )
+    
     /// Default object class ID for labels not found in the provided mapping.
     private static let unknownObjectClass = -1
     
@@ -124,7 +139,8 @@ struct MetadataCreator {
             gps_data: gpsData,
             image_file_timestamp: imageTimestampString,
             image_file_name: imageFileName,
-            detections: detections
+            detections: detections,
+            project: MetadataCreator.default_project_info
         )
         
         return metadata

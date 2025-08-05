@@ -1,5 +1,6 @@
 import Foundation
 import Logging // For logging
+import UniformTypeIdentifiers
 
 // MARK: - Custom Error Enum
 enum AzureIoTError: AppError {
@@ -210,7 +211,8 @@ class AzureIoTDataUploader {
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.addValue("BlockBlob", forHTTPHeaderField: "x-ms-blob-type")
-        request.addValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        let mimetype = self.mimeTypeForFilePath(uploadResponse.blobName)
+        request.addValue(mimetype, forHTTPHeaderField: "Content-Type")
         request.addValue("\(data.count)", forHTTPHeaderField: "Content-Length")
 
         logger.trace("Uploading data to blob...")
@@ -228,6 +230,18 @@ class AzureIoTDataUploader {
             throw error
         }
         logger.trace("Blob upload successful (HTTP \(httpResponse.statusCode)).")
+    }
+
+    private func mimeTypeForFilePath(_ filePath: String) -> String {
+        let filename = filePath as NSString
+        let pathExtension = filename.pathExtension
+        
+        guard let uti = UTType(filenameExtension: pathExtension),
+                let mimeType = uti.preferredMIMEType else {
+            return "application/octet-stream"
+        }
+        
+        return mimeType
     }
 
     /// Notifies Azure IoT Hub of the result of a file upload.
