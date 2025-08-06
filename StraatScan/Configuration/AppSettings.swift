@@ -10,6 +10,7 @@ final class AppSettings: ObservableObject {
     @Published var detectMobileToilets: Bool
     @Published var detectScaffoldings: Bool
     @Published var drawBoundingBoxes: Bool
+    @Published var useWideAngle: Bool
     
     private var cancellable: AnyCancellable?
 
@@ -18,6 +19,7 @@ final class AppSettings: ObservableObject {
         self.detectMobileToilets = UserDefaults.standard.bool(forKey: "detectMobileToilets")
         self.detectScaffoldings = UserDefaults.standard.bool(forKey: "detectScaffoldings")
         self.drawBoundingBoxes = UserDefaults.standard.bool(forKey: "drawBoundingBoxes")
+        self.useWideAngle = UserDefaults.standard.bool(forKey: "useWideAngle")
         
         cancellable = NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
             .sink { _ in
@@ -32,5 +34,6 @@ final class AppSettings: ObservableObject {
         detectMobileToilets = UserDefaults.standard.bool(forKey: "detectMobileToilets")
         detectScaffoldings = UserDefaults.standard.bool(forKey: "detectScaffoldings")
         drawBoundingBoxes = UserDefaults.standard.bool(forKey: "drawBoundingBoxes")
+        useWideAngle = UserDefaults.standard.bool(forKey: "useWideAngle")
     }
 }

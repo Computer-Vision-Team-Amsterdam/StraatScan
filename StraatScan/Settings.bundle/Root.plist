@@ -40,9 +40,19 @@
 			<key>Type</key>
 			<string>PSToggleSwitchSpecifier</string>
 			<key>Title</key>
-			<string>Show Bounding Boxes</string>
+			<string>Draw bounding boxes</string>
 			<key>Key</key>
 			<string>drawBoundingBoxes</string>
+			<key>DefaultValue</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSToggleSwitchSpecifier</string>
+			<key>Title</key>
+			<string>Use wide angle lens</string>
+			<key>Key</key>
+			<string>useWideAngle</string>
 			<key>DefaultValue</key>
 			<true/>
 		</dict>

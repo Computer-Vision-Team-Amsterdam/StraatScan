@@ -23,13 +23,16 @@ public protocol VideoCaptureDelegate: AnyObject {
 // MARK: - Camera selector
 func bestCaptureDevice(for position: AVCaptureDevice.Position) -> AVCaptureDevice {
     if position == .back {
-        if UserDefaults.standard.bool(forKey: "use_telephoto"),
+        if UserDefaults.standard.bool(forKey: "useWideAngle"),
+           let device = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back) {
+            print("Using wide angle lens")
+            return device
+        } else if UserDefaults.standard.bool(forKey: "use_telephoto"),
            let device = AVCaptureDevice.default(.builtInTelephotoCamera, for: .video, position: .back) {
+            print("Using telephoto lens")
             return device
-        } else if let device = AVCaptureDevice.default(.builtInDualCamera, for: .video, position: .back) {
-            return device
-        } else if let device = AVCaptureDevice.default(
-            .builtInWideAngleCamera, for: .video, position: .back) {
+        } else if let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) {
+            print("Using default lens")
             return device
         } else {
             fatalError("Expected back camera device is not available.")
@@ -93,7 +96,7 @@ public class VideoCapture: NSObject {
         }
 
         let preview = AVCaptureVideoPreviewLayer(session: captureSession)
-        preview.videoGravity = .resizeAspectFill
+        preview.videoGravity = .resizeAspect
         preview.connection?.videoRotationAngle = 90
         self.previewLayer = preview
 
