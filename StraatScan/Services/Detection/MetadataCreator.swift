@@ -45,6 +45,33 @@ struct MetadataOutput: Codable {
     let project: ProjectInfo?
 }
 
+struct RawMetaDataOutput: Codable {
+    let record_timestamp: String
+    let image_file_timestamp: String
+    let gps_data: GPSDataOutput?
+}
+
+struct FullFrameMetadataOutput: Codable {
+    let timestamp_start: String
+    let timestamp_end: String
+    let data_path: String
+    let frames: [RawMetaDataOutput]
+}
+
+/// Formats a Date or Unix timestamp (Double) into ISO 8601 String (UTC, with microseconds).
+private func formatTimestampToISO8601(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+    formatter.timeZone = TimeZone(identifier: "Europe/Amsterdam")
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    return formatter.string(from: date)
+}
+
+/// Overload for TimeInterval (Unix timestamp).
+private func formatTimestampToISO8601(_ timestamp: TimeInterval) -> String {
+    let date = Date(timeIntervalSince1970: timestamp)
+    return formatTimestampToISO8601(date)
+}
 
 struct MetadataCreator {
     private static let default_project_info = ProjectInfo(
@@ -60,20 +87,7 @@ struct MetadataCreator {
     /// Default tracking ID if none is available.
     private static let defaultTrackingId = -1
     
-    /// Formats a Date or Unix timestamp (Double) into ISO 8601 String (UTC, with microseconds).
-    private static func formatTimestampToISO8601(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        return formatter.string(from: date)
-    }
-    
-    /// Overload for TimeInterval (Unix timestamp).
-    private static func formatTimestampToISO8601(_ timestamp: TimeInterval) -> String {
-        let date = Date(timeIntervalSince1970: timestamp)
-        return formatTimestampToISO8601(date)
-    }
+
     
     /// Creates structured metadata from detection results and associated data.
     ///
@@ -92,14 +106,14 @@ struct MetadataCreator {
         labelMapping: [String: Int]
     ) -> MetadataOutput {
         
-        let recordTimestampString = MetadataCreator.formatTimestampToISO8601(Date())
-        let imageTimestampString = MetadataCreator.formatTimestampToISO8601(imageTimestamp)
+        let recordTimestampString = formatTimestampToISO8601(Date())
+        let imageTimestampString = formatTimestampToISO8601(imageTimestamp)
         let gpsData: GPSDataOutput?
         if let locData = locationData {
             gpsData = GPSDataOutput(
                 latitude: locData.latitude,
                 longitude: locData.longitude,
-                coordinate_time_stamp: MetadataCreator.formatTimestampToISO8601(locData.timestamp),
+                coordinate_time_stamp: formatTimestampToISO8601(locData.timestamp),
                 accuracy: locData.accuracy
             )
         } else {
@@ -145,4 +159,75 @@ struct MetadataCreator {
         
         return metadata
     }
+}
+
+class FullFrameMetadataCreator {
+    private var startTimeStamp: TimeInterval
+    private var metaDataList: [RawMetaDataOutput]
+    private let maxLength: Int
+    
+    init() {
+        let infoDict = Bundle.main.infoDictionary
+        self.maxLength = Int(infoDict?["FullMetadataMaxLength"] as? String ?? "500") ?? 500
+        self.startTimeStamp = -1
+        self.metaDataList = []
+    }
+    
+    private func reset() {
+        self.startTimeStamp = -1
+        self.metaDataList = []
+    }
+    
+    func appendLocationData(imageTimeStamp: TimeInterval, locationData: LocationData?) -> Bool {
+        if self.startTimeStamp == -1 {
+            self.startTimeStamp = Date().timeIntervalSince1970
+        }
+        let recordTimestampString = formatTimestampToISO8601(Date())
+        let imageTimestampString = formatTimestampToISO8601(imageTimeStamp)
+        let gpsData: GPSDataOutput?
+        if let locData = locationData {
+            gpsData = GPSDataOutput(
+                latitude: locData.latitude,
+                longitude: locData.longitude,
+                coordinate_time_stamp: formatTimestampToISO8601(locData.timestamp),
+                accuracy: locData.accuracy
+            )
+        } else {
+            gpsData = nil
+        }
+        let metaData = RawMetaDataOutput(
+            record_timestamp: recordTimestampString,
+            image_file_timestamp: imageTimestampString,
+            gps_data: gpsData
+        )
+        self.metaDataList.append(metaData)
+        
+        if self.metaDataList.count >= self.maxLength {
+            return false
+        } else {
+            return true
+        }
+    }
+    
+    func getFullMetaDataAndReset() -> FullFrameMetadataOutput? {
+        if self.startTimeStamp == -1 {
+            return nil
+        }
+        
+        let startTimeString = formatTimestampToISO8601(self.startTimeStamp)
+        let endTimeString = formatTimestampToISO8601(Date())
+        let dataPath = "StraatScan"
+        
+        let fullMetaData = FullFrameMetadataOutput(
+            timestamp_start: startTimeString,
+            timestamp_end: endTimeString,
+            data_path: dataPath,
+            frames: self.metaDataList
+        )
+        
+        self.reset()
+        
+        return fullMetaData
+    }
+    
 }

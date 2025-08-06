@@ -38,6 +38,8 @@
 	<string>iothub-oor-ont-weu-itr-01.azure-devices.net</string>
 	<key>IoUThreshold</key>
 	<string>0.45</string>
+	<key>FullMetadataMaxLength</key>
+	<string>500</string>
 	<key>LSBundleContainsCoreMLmlmodelc</key>
 	<true/>
 	<key>LSRequiresIPhoneOS</key>

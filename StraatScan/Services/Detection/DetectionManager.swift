@@ -156,6 +156,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// Indicates whether the video capture has been successfully configured.
     private(set) var isConfigured: Bool = false
     
+    private var fullMetaDataCreator: FullFrameMetadataCreator
+    
     // MARK: - Published properties
     
     /// Indicates if a formal detection for uploading is in progress.
@@ -202,6 +204,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         self.confidenceThreshold = Double(infoDict?["ConfidenceThreshold"] as? String ?? "0.45") ?? 0.45
         self.frameCompressionQuality = Double(infoDict?["FrameCompressionQuality"] as? String ?? "0.5") ?? 0.5
         self.containerBoxLineWidth = CGFloat((infoDict?["ContainerBoxLineWidth"] as? String).flatMap(Double.init) ?? 3)
+        
+        // Set up full frame metadata creator.
+        fullMetaDataCreator = FullFrameMetadataCreator()
         
         super.init()
         
@@ -335,6 +340,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         videoCapture?.stop()
         self.isDetectingForUpload = false
         managerLogger.info("Detection stopped.")
+        self.writeFullFrameMetadata()
         detectionTimer?.invalidate()
         detectionTimer = nil
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
@@ -396,6 +402,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             logError(DetectionError.visionRequestFailed(error), managerLogger)
             return
         }
+        
+        self.appendRawMetaData()
         
         guard let results = request.results as? [VNRecognizedObjectObservation], !results.isEmpty else {
             return
@@ -554,6 +562,72 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         return detectionsFolderURL
     }
     
+    private func appendRawMetaData() {
+        let imageTimestamp = self.lastPixelBufferTimestamp ?? Date().timeIntervalSince1970
+        
+        var currentLocationData: LocationData? = nil
+        if let lastKnownLocation = locationManager.lastKnownLocation,
+           let timestamp = locationManager.lastTimestamp,
+           let accuracy = locationManager.lastAccuracy {
+            currentLocationData = LocationData(
+                latitude: lastKnownLocation.latitude,
+                longitude: lastKnownLocation.longitude,
+                timestamp: timestamp,
+                accuracy: accuracy
+            )
+        } else {
+            managerLogger.warning("Location data unavailable for metadata.")
+        }
+        
+        let store_ok = fullMetaDataCreator.appendLocationData(imageTimeStamp: imageTimestamp, locationData: currentLocationData)
+        if !store_ok {
+            self.writeFullFrameMetadata()
+        }
+    }
+    
+    func writeFullFrameMetadata() {
+        guard let fullMetaDataObject = fullMetaDataCreator.getFullMetaDataAndReset() else {
+            managerLogger.debug("No full frame metadata to write.")
+            return
+        }
+        
+        // Generate filename base
+        let fileDateFormatter = DateFormatter()
+        fileDateFormatter.dateFormat = "yyyyMMdd_HHmmssSSS"
+        let fileDateString = fileDateFormatter.string(from: Date())
+        let fileNameBase = "raw_metadata_\(fileDateString)"
+        
+        // Genarate date subfolder name
+        let folderDateFormatter = DateFormatter()
+        folderDateFormatter.dateFormat = "yyyy-MM-dd"
+        let folderName = folderDateFormatter.string(from: Date())
+        
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let jsonData = try encoder.encode(fullMetaDataObject)
+            let blobName = "full_frame_metadata/\(folderName)/\(fileNameBase).json"
+            
+            guard let uploader = self.uploader else {
+                logError(DetectionError.uploaderNotInitialized, managerLogger)
+                saveFileLocally(data: jsonData, filename: blobName)
+                return
+            }
+            
+            Task {
+                do {
+                    managerLogger.info("Attempting to upload metadata: \(blobName)")
+                    try await uploader.uploadData(jsonData, blobName: blobName)
+                    managerLogger.info("Full frame metadata \(blobName) uploaded successfully!")
+                } catch {
+                    saveFileLocally(data: jsonData, filename: blobName)
+                }
+            }
+        } catch {
+            logError(DetectionError.metadataSerializationFailed(error), managerLogger)
+        }
+    }
+    
     /// Delivers the detection results to Azure IoT Hub.
     /// - Parameters:
     ///   - image: The image containing the detection results.
@@ -658,11 +732,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             if !FileManager.default.fileExists(atPath: blobDirUrl.path) {
                 try FileManager.default.createDirectory(at: blobDirUrl, withIntermediateDirectories: true, attributes: nil)
                 managerLogger.info("Created folder at: \(blobDirUrl.path)")
-                
-                
-                try data.write(to: blobFileURL)
-                managerLogger.info("Saved file locally at \(blobFileURL.path)")
             }
+            try data.write(to: blobFileURL)
+            managerLogger.info("Saved file locally at \(blobFileURL.path)")
         } catch let error as FileError {
             logError(DetectionError.fileOperationFailed(filename, error), managerLogger)
         } catch {
