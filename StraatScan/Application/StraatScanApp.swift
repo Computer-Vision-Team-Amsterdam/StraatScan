@@ -10,6 +10,7 @@ struct StraatScanApp: App {
             "detectMobileToilets": true,
             "detectScaffoldings": true,
             "drawBoundingBoxes": false,
+            "useWideAngle": true,
         ])
     }
 
