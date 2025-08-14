@@ -10,6 +10,8 @@ enum CredentialError: AppError {
     case credentialKeyMissing(String)
     case credentialKeyEmpty(String)
     case credentialKeyInvalidType(String)
+    case credentialInvalid(String)
+    case credentialExpired(key: String, date: Date)
     case keychainSaveFailed(key: String, status: String)
     case keychainReadFailed(key: String, status: String)
     case keychainDataEncodingFailed(String)
@@ -19,7 +21,7 @@ enum CredentialError: AppError {
         switch self {
         case .infoPlistUnreadable:
             return "Configuration Error"
-        case .credentialKeyMissing, .credentialKeyEmpty, .credentialKeyInvalidType:
+        case .credentialKeyMissing, .credentialKeyEmpty, .credentialKeyInvalidType, .credentialInvalid, .credentialExpired:
             return "Invalid Configuration"
         case .keychainSaveFailed, .keychainReadFailed, .keychainDataEncodingFailed, .keychainDataDecodingFailed:
             return "Security Error"
@@ -36,6 +38,10 @@ enum CredentialError: AppError {
             return "A required credential key ('\(key)') is present in the configuration but has no value."
         case .credentialKeyInvalidType(let key):
             return "A credential ('\(key)') in the configuration has an incorrect format."
+        case .credentialInvalid(let key):
+            return "A credential ('\(key)') is invalid."
+        case .credentialExpired(let key, let date):
+            return "A credential ('\(key)') expired on \(date)."
         case .keychainSaveFailed(let key, let status):
             return "Failed to save a credential ('\(key)') to the secure Keychain. (Error: \(status))"
         case .keychainReadFailed(let key, let status):
@@ -57,6 +63,10 @@ enum CredentialError: AppError {
             return "CredentialError.credentialKeyEmpty"
         case .credentialKeyInvalidType:
             return "CredentialError.credentialKeyInvalidType"
+        case .credentialInvalid:
+            return "CredentialError.credentialInvalid"
+        case .credentialExpired:
+            return "CredentialError.credentialExpired"
         case .keychainSaveFailed:
             return "CredentialError.keychainSaveFailed"
         case .keychainReadFailed:
@@ -105,7 +115,7 @@ class IoTDeviceManager: ObservableObject {
             logError(error, managerLogger)
         }
     }
-
+    
     /// Retrieves the application's Info.plist dictionary. Throws an error on failure.
     private func getInfoDictionary() throws -> [String: Any]? {
         guard let infoDict = Bundle.main.infoDictionary else {
@@ -127,7 +137,7 @@ class IoTDeviceManager: ObservableObject {
                 throw CredentialError.credentialKeyEmpty(key)
             }
         }
-
+        
         if currentValue != plistValue {
             managerLogger.info("New value found for key '\(key)'. Updating Keychain.")
             try saveToKeychain(value: plistValue, forKey: key)
@@ -139,6 +149,32 @@ class IoTDeviceManager: ObservableObject {
                 updatePublishedProperty(forKey: key, with: keychainValue)
             }
         }
+        
+        if key == self.sasTokenKey {
+            guard let token = try readFromKeychain(forKey: key) else {
+                throw CredentialError.credentialInvalid(key)
+            }
+            try self.checkSASTokenValidity(key: key, value: token)
+        }
+    }
+    
+    /// Checks if SAS token is still valid. Throws on failure.
+    private func checkSASTokenValidity(key: String, value: String) throws {
+        managerLogger.info("Checking token validity for key: \(key)...")
+        
+        guard let timeStamp = Int(String(value.split(separator: "=").last!)) else {
+            throw CredentialError.credentialInvalid(key)
+        }
+        
+        let expirationDate = Date(timeIntervalSince1970: TimeInterval(timeStamp))
+        if Date.now > expirationDate {
+            let error = CredentialError.credentialExpired(key: key, date: expirationDate)
+            logError(error, managerLogger)
+            throw error
+        } else {
+            managerLogger.info("Token still valid until \(expirationDate).")
+        }
+        
     }
 
     /// Updates the correct @Published property based on the provided key.
