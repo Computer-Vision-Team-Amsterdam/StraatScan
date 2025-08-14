@@ -193,6 +193,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         return Bundle.main.object(forInfoDictionaryKey: "FrameRateFPS") as? Double ?? 2.0
     }()
     
+    private var currentOrientation: UIDeviceOrientation = .portrait
+
+    
     // MARK: - Initialization
     
     /// Initializes the DetectionManager, loading the YOLO model and setting up video capture.
@@ -215,6 +218,15 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         } else {
             logError(DetectionError.ioTHubHostMissing, managerLogger)
         }
+        
+        // Device orientation listener
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(deviceOrientationDidChange),
+            name: UIDevice.orientationDidChangeNotification,
+            object: nil
+        )
+        currentOrientation = UIDevice.current.orientation
         
         // 1. Load the YOLO model.
         let modelConfig = MLModelConfiguration()
@@ -345,10 +357,14 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         detectionTimer = nil
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
+
+    @objc private func deviceOrientationDidChange() {
+        currentOrientation = UIDevice.current.orientation
+    }
     
     /// Map UIDevice orientation → EXIF orientation for Vision
     private func exifOrientationForCurrentDevice() -> CGImagePropertyOrientation {
-        switch UIDevice.current.orientation {
+        switch currentOrientation {
         case .portrait:           return .up  // home button / gesture bar at bottom
         case .portraitUpsideDown: return .down    // home button / gesture bar at top
         case .landscapeLeft:      return .left   // home button on the right
