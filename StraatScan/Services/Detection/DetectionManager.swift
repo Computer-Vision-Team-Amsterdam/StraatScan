@@ -419,36 +419,39 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             return
         }
         
-        self.appendRawMetaData()
-        
-        guard let results = request.results as? [VNRecognizedObjectObservation], !results.isEmpty else {
-            return
-        }
-        
-        DispatchQueue.main.async(execute: {
-            if let results = request.results as? [VNRecognizedObjectObservation] {
-
-                let targetClasses: [(name: String, enabled: Bool)] = [
-                    ("container", UserDefaults.standard.bool(forKey: "detectContainers")),
-                    ("mobile toilet", UserDefaults.standard.bool(forKey: "detectMobileToilets")),
-                    ("scaffolding", UserDefaults.standard.bool(forKey: "detectScaffoldings"))
-                ]
-
-                // --- Step 1: Check if at least one enabled target is detected in the observations.
-                let shouldProcess = targetClasses.contains { (objectName, isEnabled) in
-                    return isEnabled && results.contains { observation in
-                        if let label = observation.labels.first?.identifier.lowercased() {
-                            return label == objectName
+        if self.isDetectingForUpload {
+            
+            self.appendRawMetaData()
+            
+            guard let results = request.results as? [VNRecognizedObjectObservation], !results.isEmpty else {
+                return
+            }
+            
+            DispatchQueue.main.async(execute: {
+                if let results = request.results as? [VNRecognizedObjectObservation] {
+                    
+                    let targetClasses: [(name: String, enabled: Bool)] = [
+                        ("container", UserDefaults.standard.bool(forKey: "detectContainers")),
+                        ("mobile toilet", UserDefaults.standard.bool(forKey: "detectMobileToilets")),
+                        ("scaffolding", UserDefaults.standard.bool(forKey: "detectScaffoldings"))
+                    ]
+                    
+                    // --- Step 1: Check if at least one enabled target is detected in the observations.
+                    let shouldProcess = targetClasses.contains { (objectName, isEnabled) in
+                        return isEnabled && results.contains { observation in
+                            if let label = observation.labels.first?.identifier.lowercased() {
+                                return label == objectName
+                            }
+                            return false
                         }
-                        return false
+                    }
+                    if shouldProcess {
+                        self.managerLogger.info("Object detected, processing frame...")
+                        self.processDetectedFrame(results: results, targetClasses: targetClasses)
                     }
                 }
-                if shouldProcess {
-                    self.managerLogger.info("Object detected, processing frame...")
-                    self.processDetectedFrame(results: results, targetClasses: targetClasses)
-                }
-            }
-        })
+            })
+        }
     }
     
     /// Handles processing after a container has been detected in a frame.
