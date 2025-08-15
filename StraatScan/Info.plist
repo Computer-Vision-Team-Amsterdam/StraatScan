@@ -23,7 +23,7 @@
 	<key>CameraSessionPreset</key>
 	<string>hd1280x720</string>
 	<key>ConfidenceThreshold</key>
-	<string>0.25</string>
+	<string>0.8</string>
 	<key>ContainerBoxLineWidth</key>
 	<string>3</string>
 	<key>DEVICE_ID</key>
