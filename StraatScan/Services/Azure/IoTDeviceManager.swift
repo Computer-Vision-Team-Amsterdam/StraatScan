@@ -109,6 +109,9 @@ class IoTDeviceManager: ObservableObject {
             
             managerLogger.debug("Processing SAS Token credential...")
             try checkAndProcessCredential(key: sasTokenKey, currentValue: self.deviceSasToken, infoDict: infoDict)
+            
+            managerLogger.debug("Checking SAS Token validity...")
+            try self.checkSASTokenValidity(key: self.sasTokenKey)
 
             managerLogger.info("Device credentials setup check completed successfully.")
         } catch {
@@ -149,28 +152,20 @@ class IoTDeviceManager: ObservableObject {
                 updatePublishedProperty(forKey: key, with: keychainValue)
             }
         }
-        
-        if key == self.sasTokenKey {
-            guard let token = try readFromKeychain(forKey: key) else {
-                throw CredentialError.credentialInvalid(key)
-            }
-            try self.checkSASTokenValidity(key: key, value: token)
-        }
     }
     
     /// Checks if SAS token is still valid. Throws on failure.
-    private func checkSASTokenValidity(key: String, value: String) throws {
-        managerLogger.info("Checking token validity for key: \(key)...")
-        
-        guard let timeStamp = Int(String(value.split(separator: "=").last!)) else {
+    private func checkSASTokenValidity(key: String) throws {
+        guard let token = try readFromKeychain(forKey: key) else {
+            throw CredentialError.credentialInvalid(key)
+        }
+        guard let timeStamp = Int(String(token.split(separator: "=").last!)) else {
             throw CredentialError.credentialInvalid(key)
         }
         
         let expirationDate = Date(timeIntervalSince1970: TimeInterval(timeStamp))
         if Date.now > expirationDate {
-            let error = CredentialError.credentialExpired(key: key, date: expirationDate)
-            logError(error, managerLogger)
-            throw error
+            throw CredentialError.credentialExpired(key: key, date: expirationDate)
         } else {
             managerLogger.info("Token still valid until \(expirationDate).")
         }
