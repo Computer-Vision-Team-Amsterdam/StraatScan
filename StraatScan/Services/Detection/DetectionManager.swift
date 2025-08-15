@@ -162,15 +162,20 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     
     /// Indicates if a formal detection for uploading is in progress.
     @Published private(set) var isDetectingForUpload: Bool = false
+
+    /// The total number of images processed.
+    var totalImagesContinuous = 0  // Updates continuously
+    @Published var totalImages = 0  // Updates every 60 seconds
     
     /// The number of objects detected.
     @Published var objectsDetected = 0
-    
-    /// The total number of images processed.
-    @Published var totalImages = 0
+
+    /// The total number of files pending.
+    @Published var filesPending = 0
     private var checkedImagesFromFolder: Bool = false
     
-    /// The total number of images successfully delivered to Azure.
+    /// The total number of files successfully delivered to Azure.
+    @Published var metadataDelivered = 0
     @Published var imagesDelivered = 0
     
     /// The total number of minutes the detection has been running.
@@ -345,6 +350,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             guard let self = self else { return }
             DispatchQueue.main.async {
                 self.minutesRunning += 1
+                self.totalImages = self.totalImagesContinuous
             }
         }
     }
@@ -422,6 +428,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         }
         
         if self.isDetectingForUpload {
+            self.totalImagesContinuous += 1
             
             self.appendRawMetaData()
             
@@ -639,6 +646,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 do {
                     managerLogger.info("Attempting to upload metadata: \(blobName)")
                     try await uploader.uploadData(jsonData, blobName: blobName)
+                    DispatchQueue.main.async {
+                        self.metadataDelivered += 1
+                    }
                     managerLogger.info("Full frame metadata \(blobName) uploaded successfully!")
                 } catch {
                     saveFileLocally(data: jsonData, filename: blobName)
@@ -655,9 +665,6 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     ///   - predictions: The list of detected objects.
     func deliverDetectionToAzure(image: UIImage, predictions: [VNRecognizedObjectObservation]) {
         managerLogger.info("Preparing detection data for Azure delivery...")
-        DispatchQueue.main.async {
-            self.totalImages += 1
-        }
         
         // Generate filename base
         let fileDateFormatter = DateFormatter()
@@ -732,6 +739,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 do {
                     managerLogger.info("Attempting to upload metadata: \(blobName)")
                     try await uploader?.uploadData(jsonData, blobName: blobName)
+                    DispatchQueue.main.async {
+                        self.metadataDelivered += 1
+                    }
                     managerLogger.info("Metadata \(blobName) uploaded successfully!")
                 } catch {
                     saveFileLocally(data: jsonData, filename: blobName)
@@ -755,6 +765,11 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 managerLogger.info("Created folder at: \(blobDirUrl.path)")
             }
             try data.write(to: blobFileURL)
+            
+            DispatchQueue.main.async {
+                self.filesPending += 1
+            }
+            
             managerLogger.info("Saved file locally at \(blobFileURL.path)")
         } catch let error as FileError {
             logError(DetectionError.fileOperationFailed(filename, error), managerLogger)
@@ -795,7 +810,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             managerLogger.info("Found \(fileURLs.count) pending files to upload.")
             if !checkedImagesFromFolder {
                 DispatchQueue.main.async {
-                    self.totalImages += fileURLs.count
+                    self.filesPending = fileURLs.count
                 }
                 checkedImagesFromFolder = true
             }
@@ -818,8 +833,19 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                         try FileManager.default.removeItem(at: fileURL)
                         managerLogger.info("Deleted local file \(blobName)")
                         
+                        let filename = blobName as NSString
+                        let filetype = filename.pathExtension
+                                               
                         DispatchQueue.main.async {
-                            self.imagesDelivered += 1
+                            switch (filetype.lowercased()) {
+                            case "jpg":
+                                self.imagesDelivered += 1
+                            case "json":
+                                self.metadataDelivered += 1
+                            default:
+                                self.managerLogger.warning("Unexpected filetype: \(filetype)")
+                            }
+                            self.filesPending -= 1
                         }
                     } catch {
                         self.managerLogger.critical("Failed to process and clear stored file \(fileURL.path). It will be retried later.")

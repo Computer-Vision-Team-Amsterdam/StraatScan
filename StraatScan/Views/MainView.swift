@@ -43,16 +43,12 @@ struct StatusRows: View {
 
     var body: some View {
         Group {
+            let gpsAccuracy = locationManager.lastAccuracy.map { String(format: "%.2f", $0) } ?? "N/A"
             infoRow(label: "GPS",
-                    value: locationManager.isReceivingLocationUpdates ? "ON" : "OFF",
+                    value: locationManager.isReceivingLocationUpdates ? "ON [\(gpsAccuracy)m]" : "OFF",
                     valueColor: locationManager.isReceivingLocationUpdates ? .green : .red)
             Divider()
-            
-            infoRow(label: "GPS accuracy (m)",
-                    value: locationManager.lastAccuracy.map { String(format: "%.2f", $0) } ?? "N/A",
-                    valueColor: locationManager.lastAccuracy != nil ? .green : .red)
-            Divider()
-            
+                       
             infoRow(label: "Internet connection",
                     value: networkMonitor.internetAvailable ? "ON" : "OFF",
                     valueColor: networkMonitor.internetAvailable ? .green : .red)
@@ -63,15 +59,14 @@ struct StatusRows: View {
                     valueColor: .green)
             Divider()
             
+            Text("Detecting:")
             HStack {
-                Text("Detect:")
-                Spacer()
                 Group {
-                    detectLabel(text: "containers", enabled: self.detectContainers)
+                    detectLabel(text: "container", enabled: self.detectContainers)
                     Text(",")
-                    detectLabel(text: "mobile toilets", enabled: self.detectMobileToilets)
+                    detectLabel(text: "mobile toilet", enabled: self.detectMobileToilets)
                     Text(",")
-                    detectLabel(text: "scaffoldings", enabled: self.detectScaffoldings)
+                    detectLabel(text: "scaffolding", enabled: self.detectScaffoldings)
                   }
             }
         }
@@ -90,30 +85,20 @@ struct DetectionStatsRows: View {
 
     var body: some View {
         Group {
-            infoRow(label: "Recorded hours",
-                    value: formattedTime)
-            Divider()
-
-            infoRow(label: "Total images",
-                    value: "\(detectionManager.totalImages)")
+            infoRow(label: "Recorded",
+                    value: "\(formattedTime)h, \(detectionManager.totalImages) images")
             Divider()
 
             infoRow(label: "Objects detected",
                     value: "\(detectionManager.objectsDetected)")
             Divider()
 
-            infoRow(label: "Images delivered",
-                    value: "\(detectionManager.imagesDelivered)")
+            infoRow(label: "Files delivered (images | metadata)",
+                    value: "\(detectionManager.imagesDelivered) | \(detectionManager.metadataDelivered)")
             Divider()
-
-            HStack {
-                Text("Delivery progress")
-                Spacer()
-                ProgressView(value: Double(detectionManager.imagesDelivered),
-                             total: Double(max(detectionManager.totalImages, 1)))
-                    .progressViewStyle(LinearProgressViewStyle(tint: .green))
-                    .frame(width: 100)
-            }
+            
+            infoRow(label: "Files pending",
+                    value: "\(detectionManager.filesPending)")
         }
     }
 }
@@ -196,52 +181,58 @@ struct MainView: View {
 
     /// UI portrait mode layout.
     private var portraitLayout: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            detectingBanner
-            cameraPreviewRow
-            Divider()
-            StatusRows(locationManager: locationManager,
-                       networkMonitor: networkMonitor,
-                       storageAvailable: storageAvailable,
-                       detectContainers: appSettings.detectContainers,
-                       detectMobileToilets: appSettings.detectMobileToilets,
-                       detectScaffoldings: appSettings.detectScaffoldings)
-            Spacer()
-            DetectionStatsRows(detectionManager: detectionManager,
-                                formattedTime: formattedTime)
+        VStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    detectingBanner
+                    cameraPreviewRow
+                    Divider()
+                    StatusRows(locationManager: locationManager,
+                               networkMonitor: networkMonitor,
+                               storageAvailable: storageAvailable,
+                               detectContainers: appSettings.detectContainers,
+                               detectMobileToilets: appSettings.detectMobileToilets,
+                               detectScaffoldings: appSettings.detectScaffoldings)
+                    Spacer()
+                    Divider()
+                    DetectionStatsRows(detectionManager: detectionManager,
+                                       formattedTime: formattedTime)
+                }.padding()
+            }
+            
             Divider()
             detectionButtons
-        }
-        .padding()
+        }.padding()
     }
     
     /// UI landscape mode layout.
     private var landscapeLayout: some View {
-        HStack(spacing: 20) {
-            // Left column
-            VStack(alignment: .leading, spacing: 16) {
-                cameraPreviewRow
-                Divider()
-                StatusRows(locationManager: locationManager,
-                           networkMonitor: networkMonitor,
-                           storageAvailable: storageAvailable,
-                           detectContainers: appSettings.detectContainers,
-                           detectMobileToilets: appSettings.detectMobileToilets,
-                           detectScaffoldings: appSettings.detectScaffoldings)
-                stopButton
+        VStack {
+            ScrollView {
+                HStack(spacing: 20) {
+                    // Left column
+                    VStack(alignment: .leading, spacing: 14) {
+                        StatusRows(locationManager: locationManager,
+                                   networkMonitor: networkMonitor,
+                                   storageAvailable: storageAvailable,
+                                   detectContainers: appSettings.detectContainers,
+                                   detectMobileToilets: appSettings.detectMobileToilets,
+                                   detectScaffoldings: appSettings.detectScaffoldings)
+                    }.padding()
+                    
+                    // Right column
+                    VStack(alignment: .leading, spacing: 14) {
+                        cameraPreviewRow
+                        Divider()
+                        DetectionStatsRows(detectionManager: detectionManager,
+                                           formattedTime: formattedTime)
+                    }.padding()
+                }
             }
-            .padding()
-
-            // Right column
-            VStack(alignment: .leading, spacing: 16) {
-                DetectionStatsRows(detectionManager: detectionManager,
-                                    formattedTime: formattedTime)
-                Divider()
-                infoRow(label: " ", value: " ") // spacer row for alignment
-                detectButton
-            }
-        }
-        .padding()
+            
+            Divider()
+            detectionButtons
+        }.padding()
     }
     
     /// Top screen banner that appears in portrait mode when detecting.
