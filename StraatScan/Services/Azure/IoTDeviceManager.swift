@@ -21,8 +21,10 @@ enum CredentialError: AppError {
         switch self {
         case .infoPlistUnreadable:
             return "Configuration Error"
-        case .credentialKeyMissing, .credentialKeyEmpty, .credentialKeyInvalidType, .credentialInvalid, .credentialExpired:
+        case .credentialKeyMissing, .credentialKeyEmpty, .credentialKeyInvalidType, .credentialInvalid:
             return "Invalid Configuration"
+        case .credentialExpired:
+            return "Credential Expired"
         case .keychainSaveFailed, .keychainReadFailed, .keychainDataEncodingFailed, .keychainDataDecodingFailed:
             return "Security Error"
         }
