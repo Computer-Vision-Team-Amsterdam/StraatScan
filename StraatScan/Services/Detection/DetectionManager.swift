@@ -213,6 +213,8 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         
         super.init()
         
+        self.iotManager.setupDeviceCredentials()
+        
         if !self.iotHubHost.isEmpty {
             self.uploader = AzureIoTDataUploader(host: self.iotHubHost, iotDeviceManager: self.iotManager)
         } else {
@@ -227,7 +229,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             object: nil
         )
         currentOrientation = UIDevice.current.orientation
-        
+                
         // 1. Load the YOLO model.
         let modelConfig = MLModelConfiguration()
         modelConfig.computeUnits = .all

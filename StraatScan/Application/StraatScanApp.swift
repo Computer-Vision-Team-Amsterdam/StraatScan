@@ -17,10 +17,6 @@ struct StraatScanApp: App {
     var body: some Scene {
         WindowGroup {
             MainView()
-                .environmentObject(iotManager)
-                .onAppear {
-                    iotManager.setupDeviceCredentials()
-                }
         }
     }
 }

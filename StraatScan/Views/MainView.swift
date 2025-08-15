@@ -120,7 +120,6 @@ struct DetectionStatsRows: View {
 
 struct MainView: View {
     @StateObject private var appSettings = AppSettings()
-    @EnvironmentObject var iotManager: IoTDeviceManager
     @StateObject private var locationManager = LocationManager()
     @StateObject private var networkMonitor = NetworkMonitor()
     @ObservedObject private var detectionManager = DetectionManager.shared
