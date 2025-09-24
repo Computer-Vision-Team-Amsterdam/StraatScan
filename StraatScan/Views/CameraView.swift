@@ -51,7 +51,7 @@ class CameraPreviewController: UIViewController {
         }
         
         previewLayer.frame = view.bounds
-        previewLayer.videoGravity = .resizeAspectFill
+        previewLayer.videoGravity = .resizeAspect
         view.layer.addSublayer(previewLayer)
         
         logger.info("CameraPreviewController successfully configured with DetectionManager's preview layer.")
@@ -76,12 +76,41 @@ class CameraPreviewController: UIViewController {
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        view.layer.sublayers?.first?.frame = view.bounds
+//        view.layer.sublayers?.first?.frame = view.bounds
+        if let previewLayer = DetectionManager.shared.videoCapture?.previewLayer {
+            previewLayer.frame = view.bounds
+            if let connection = previewLayer.connection, connection.isVideoOrientationSupported {
+                connection.videoOrientation = getVideoOrientation(from: UIDevice.current.orientation)
+            }
+        }
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+//        coordinator.animate { _ in
+//            self.view.layer.sublayers?.first?.frame = self.view.bounds
+//        }
         coordinator.animate { _ in
-            self.view.layer.sublayers?.first?.frame = self.view.bounds
+            if let previewLayer = DetectionManager.shared.videoCapture?.previewLayer {
+                previewLayer.frame = self.view.bounds
+                if let connection = previewLayer.connection, connection.isVideoOrientationSupported {
+                    connection.videoOrientation = self.getVideoOrientation(from: UIDevice.current.orientation)
+                }
+            }
+        }
+    }
+    
+    private func getVideoOrientation(from deviceOrientation: UIDeviceOrientation) -> AVCaptureVideoOrientation {
+        switch deviceOrientation {
+        case .portrait:
+            return .portrait
+        case .portraitUpsideDown:
+            return .portraitUpsideDown
+        case .landscapeLeft:
+            return .landscapeRight // Device is rotated left, so camera should rotate right
+        case .landscapeRight:
+            return .landscapeLeft // Device is rotated right, so camera should rotate left
+        default:
+            return .portrait
         }
     }
 }

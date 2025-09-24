@@ -156,19 +156,26 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     /// Indicates whether the video capture has been successfully configured.
     private(set) var isConfigured: Bool = false
     
+    private var fullMetaDataCreator: FullFrameMetadataCreator
+    
     // MARK: - Published properties
     
     /// Indicates if a formal detection for uploading is in progress.
     @Published private(set) var isDetectingForUpload: Bool = false
+
+    /// The total number of images processed.
+    var totalImagesContinuous = 0  // Updates continuously
+    @Published var totalImages = 0  // Updates every 60 seconds
     
     /// The number of objects detected.
     @Published var objectsDetected = 0
-    
-    /// The total number of images processed.
-    @Published var totalImages = 0
+
+    /// The total number of files pending.
+    @Published var filesPending = 0
     private var checkedImagesFromFolder: Bool = false
     
-    /// The total number of images successfully delivered to Azure.
+    /// The total number of files successfully delivered to Azure.
+    @Published var metadataDelivered = 0
     @Published var imagesDelivered = 0
     
     /// The total number of minutes the detection has been running.
@@ -191,6 +198,9 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         return Bundle.main.object(forInfoDictionaryKey: "FrameRateFPS") as? Double ?? 2.0
     }()
     
+    private var currentOrientation: UIDeviceOrientation = .portrait
+
+    
     // MARK: - Initialization
     
     /// Initializes the DetectionManager, loading the YOLO model and setting up video capture.
@@ -203,7 +213,12 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         self.frameCompressionQuality = Double(infoDict?["FrameCompressionQuality"] as? String ?? "0.5") ?? 0.5
         self.containerBoxLineWidth = CGFloat((infoDict?["ContainerBoxLineWidth"] as? String).flatMap(Double.init) ?? 3)
         
+        // Set up full frame metadata creator.
+        fullMetaDataCreator = FullFrameMetadataCreator()
+        
         super.init()
+        
+        self.iotManager.setupDeviceCredentials()
         
         if !self.iotHubHost.isEmpty {
             self.uploader = AzureIoTDataUploader(host: self.iotHubHost, iotDeviceManager: self.iotManager)
@@ -211,6 +226,15 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             logError(DetectionError.ioTHubHostMissing, managerLogger)
         }
         
+        // Device orientation listener
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(deviceOrientationDidChange),
+            name: UIDevice.orientationDidChangeNotification,
+            object: nil
+        )
+        currentOrientation = UIDevice.current.orientation
+                
         // 1. Load the YOLO model.
         let modelConfig = MLModelConfiguration()
         modelConfig.computeUnits = .all
@@ -326,6 +350,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             guard let self = self else { return }
             DispatchQueue.main.async {
                 self.minutesRunning += 1
+                self.totalImages = self.totalImagesContinuous
             }
         }
     }
@@ -335,14 +360,19 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         videoCapture?.stop()
         self.isDetectingForUpload = false
         managerLogger.info("Detection stopped.")
+        self.writeFullFrameMetadata()
         detectionTimer?.invalidate()
         detectionTimer = nil
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
+
+    @objc private func deviceOrientationDidChange() {
+        currentOrientation = UIDevice.current.orientation
+    }
     
     /// Map UIDevice orientation → EXIF orientation for Vision
     private func exifOrientationForCurrentDevice() -> CGImagePropertyOrientation {
-        switch UIDevice.current.orientation {
+        switch currentOrientation {
         case .portrait:           return .up  // home button / gesture bar at bottom
         case .portraitUpsideDown: return .down    // home button / gesture bar at top
         case .landscapeLeft:      return .left   // home button on the right
@@ -397,34 +427,40 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             return
         }
         
-        guard let results = request.results as? [VNRecognizedObjectObservation], !results.isEmpty else {
-            return
-        }
-        
-        DispatchQueue.main.async(execute: {
-            if let results = request.results as? [VNRecognizedObjectObservation] {
-
-                let targetClasses: [(name: String, enabled: Bool)] = [
-                    ("container", UserDefaults.standard.bool(forKey: "detectContainers")),
-                    ("mobile toilet", UserDefaults.standard.bool(forKey: "detectMobileToilets")),
-                    ("scaffolding", UserDefaults.standard.bool(forKey: "detectScaffoldings"))
-                ]
-
-                // --- Step 1: Check if at least one enabled target is detected in the observations.
-                let shouldProcess = targetClasses.contains { (objectName, isEnabled) in
-                    return isEnabled && results.contains { observation in
-                        if let label = observation.labels.first?.identifier.lowercased() {
-                            return label == objectName
+        if self.isDetectingForUpload {
+            self.totalImagesContinuous += 1
+            
+            self.appendRawMetaData()
+            
+            guard let results = request.results as? [VNRecognizedObjectObservation], !results.isEmpty else {
+                return
+            }
+            
+            DispatchQueue.main.async(execute: {
+                if let results = request.results as? [VNRecognizedObjectObservation] {
+                    
+                    let targetClasses: [(name: String, enabled: Bool)] = [
+                        ("container", UserDefaults.standard.bool(forKey: "detectContainers")),
+                        ("mobile toilet", UserDefaults.standard.bool(forKey: "detectMobileToilets")),
+                        ("scaffolding", UserDefaults.standard.bool(forKey: "detectScaffoldings"))
+                    ]
+                    
+                    // --- Step 1: Check if at least one enabled target is detected in the observations.
+                    let shouldProcess = targetClasses.contains { (objectName, isEnabled) in
+                        return isEnabled && results.contains { observation in
+                            if let label = observation.labels.first?.identifier.lowercased() {
+                                return label == objectName
+                            }
+                            return false
                         }
-                        return false
+                    }
+                    if shouldProcess {
+                        self.managerLogger.info("Object detected, processing frame...")
+                        self.processDetectedFrame(results: results, targetClasses: targetClasses)
                     }
                 }
-                if shouldProcess {
-                    self.managerLogger.info("Object detected, processing frame...")
-                    self.processDetectedFrame(results: results, targetClasses: targetClasses)
-                }
-            }
-        })
+            })
+        }
     }
     
     /// Handles processing after a container has been detected in a frame.
@@ -487,7 +523,27 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                 ]
                 image = self.drawSquaresAroundDetectedAreas(in: image, boxesPerObject: detectedBoxes, colors: colors)
             }
-            self.deliverDetectionToAzure(image: image, predictions: results)
+            
+            // Get list of target class names
+            var targetClassNames: [String] = []
+            for (objectName, isEnabled) in targetClasses {
+                if isEnabled {
+                    targetClassNames.append(objectName)
+                }
+            }
+            
+            // filter predictions belonging to target classes
+            var targetPredictions: [VNRecognizedObjectObservation] = []
+            for prediction in results {
+                guard let className = prediction.labels.first?.identifier.lowercased() else {
+                    continue
+                }
+                if targetClassNames.contains(className) {
+                    targetPredictions.append(prediction)
+                }
+            }
+            
+            self.deliverDetectionToAzure(image: image, predictions: targetPredictions)
             self.lastPixelBufferForSaving = nil
         }
     }
@@ -534,25 +590,96 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         return detectionsFolderURL
     }
     
+    private func appendRawMetaData() {
+        let imageTimestamp = self.lastPixelBufferTimestamp ?? Date().timeIntervalSince1970
+        
+        var currentLocationData: LocationData? = nil
+        if let lastKnownLocation = locationManager.lastKnownLocation,
+           let timestamp = locationManager.lastTimestamp,
+           let accuracy = locationManager.lastAccuracy {
+            currentLocationData = LocationData(
+                latitude: lastKnownLocation.latitude,
+                longitude: lastKnownLocation.longitude,
+                timestamp: timestamp,
+                accuracy: accuracy
+            )
+        } else {
+            managerLogger.warning("Location data unavailable for metadata.")
+        }
+        
+        let store_ok = fullMetaDataCreator.appendLocationData(imageTimeStamp: imageTimestamp, locationData: currentLocationData)
+        if !store_ok {
+            self.writeFullFrameMetadata()
+        }
+    }
+    
+    func writeFullFrameMetadata() {
+        guard let fullMetaDataObject = fullMetaDataCreator.getFullMetaDataAndReset() else {
+            managerLogger.debug("No full frame metadata to write.")
+            return
+        }
+        
+        // Generate filename base
+        let fileDateFormatter = DateFormatter()
+        fileDateFormatter.dateFormat = "yyyyMMdd_HHmmssSSS"
+        let fileDateString = fileDateFormatter.string(from: Date())
+        let fileNameBase = "raw_metadata_\(fileDateString)"
+        
+        // Genarate date subfolder name
+        let folderDateFormatter = DateFormatter()
+        folderDateFormatter.dateFormat = "yyyy-MM-dd"
+        let folderName = folderDateFormatter.string(from: Date())
+        
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .prettyPrinted
+            let jsonData = try encoder.encode(fullMetaDataObject)
+            let blobName = "full_frame_metadata/\(folderName)/\(fileNameBase).json"
+            
+            guard let uploader = self.uploader else {
+                logError(DetectionError.uploaderNotInitialized, managerLogger)
+                saveFileLocally(data: jsonData, filename: blobName)
+                return
+            }
+            
+            Task {
+                do {
+                    managerLogger.info("Attempting to upload metadata: \(blobName)")
+                    try await uploader.uploadData(jsonData, blobName: blobName)
+                    DispatchQueue.main.async {
+                        self.metadataDelivered += 1
+                    }
+                    managerLogger.info("Full frame metadata \(blobName) uploaded successfully!")
+                } catch {
+                    saveFileLocally(data: jsonData, filename: blobName)
+                }
+            }
+        } catch {
+            logError(DetectionError.metadataSerializationFailed(error), managerLogger)
+        }
+    }
+    
     /// Delivers the detection results to Azure IoT Hub.
     /// - Parameters:
     ///   - image: The image containing the detection results.
     ///   - predictions: The list of detected objects.
     func deliverDetectionToAzure(image: UIImage, predictions: [VNRecognizedObjectObservation]) {
         managerLogger.info("Preparing detection data for Azure delivery...")
-        DispatchQueue.main.async {
-            self.totalImages += 1
-        }
         
         // Generate filename base
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyyMMdd_HHmmssSSS"
-        let dateString = dateFormatter.string(from: Date())
-        let fileNameBase = "detection_\(dateString)"
+        let fileDateFormatter = DateFormatter()
+        fileDateFormatter.dateFormat = "yyyyMMdd_HHmmssSSS"
+        let fileDateString = fileDateFormatter.string(from: Date())
+        let fileNameBase = "detection_\(fileDateString)"
+        
+        // Genarate date subfolder name
+        let folderDateFormatter = DateFormatter()
+        folderDateFormatter.dateFormat = "yyyy-MM-dd"
+        let folderName = folderDateFormatter.string(from: Date())
         
         // --- Upload Image ---
         if let imageData = image.jpegData(compressionQuality: self.frameCompressionQuality) {
-            let blobName = "\(fileNameBase).jpg"
+            let blobName = "images/\(folderName)/\(fileNameBase).jpg"
             
             guard let uploader = self.uploader else {
                 logError(DetectionError.uploaderNotInitialized, managerLogger)
@@ -606,12 +733,15 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             let encoder = JSONEncoder()
             encoder.outputFormatting = .prettyPrinted
             let jsonData = try encoder.encode(metadataObject)
-            let blobName = "\(fileNameBase).json"
+            let blobName = "detection_metadata/\(folderName)/\(fileNameBase).json"
             
             Task {
                 do {
                     managerLogger.info("Attempting to upload metadata: \(blobName)")
                     try await uploader?.uploadData(jsonData, blobName: blobName)
+                    DispatchQueue.main.async {
+                        self.metadataDelivered += 1
+                    }
                     managerLogger.info("Metadata \(blobName) uploaded successfully!")
                 } catch {
                     saveFileLocally(data: jsonData, filename: blobName)
@@ -626,9 +756,21 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
     private func saveFileLocally(data: Data, filename: String) {
         do {
             let detectionsFolderURL = try self.getDetectionsFolder()
-            let fileURL = detectionsFolderURL.appendingPathComponent(filename)
-            try data.write(to: fileURL)
-            managerLogger.info("Saved file locally at \(fileURL.path)")
+            let blobFileURL = URL(fileURLWithPath: detectionsFolderURL.path + "/" + filename)
+            
+            // Ensure the folder structure exists.
+            let blobDirUrl = blobFileURL.deletingLastPathComponent()
+            if !FileManager.default.fileExists(atPath: blobDirUrl.path) {
+                try FileManager.default.createDirectory(at: blobDirUrl, withIntermediateDirectories: true, attributes: nil)
+                managerLogger.info("Created folder at: \(blobDirUrl.path)")
+            }
+            try data.write(to: blobFileURL)
+            
+            DispatchQueue.main.async {
+                self.filesPending += 1
+            }
+            
+            managerLogger.info("Saved file locally at \(blobFileURL.path)")
         } catch let error as FileError {
             logError(DetectionError.fileOperationFailed(filename, error), managerLogger)
         } catch {
@@ -645,9 +787,21 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         
         do {
             let detectionsFolderURL = try self.getDetectionsFolder()
-            let fileURLs = try FileManager.default.contentsOfDirectory(at: detectionsFolderURL,
-                                                                       includingPropertiesForKeys: nil,
-                                                                       options: [.skipsHiddenFiles])
+
+            var fileURLs = [URL]()
+            if let enumerator = FileManager.default.enumerator(at: detectionsFolderURL, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles, .skipsPackageDescendants]) {
+                for case let fileURL as URL in enumerator {
+                    do {
+                        let fileAttributes = try fileURL.resourceValues(forKeys:[.isRegularFileKey])
+                        if fileAttributes.isRegularFile! {
+                            fileURLs.append(fileURL)
+                        }
+                    } catch {
+                        logError(DetectionError.fileOperationFailed(fileURL.path, error), managerLogger)
+                    }
+                }
+            }
+            
             if fileURLs.isEmpty {
                 managerLogger.info("No pending files found in Detections folder.")
                 return
@@ -656,7 +810,7 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             managerLogger.info("Found \(fileURLs.count) pending files to upload.")
             if !checkedImagesFromFolder {
                 DispatchQueue.main.async {
-                    self.totalImages += fileURLs.count
+                    self.filesPending = fileURLs.count
                 }
                 checkedImagesFromFolder = true
             }
@@ -664,8 +818,13 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
             Task { [weak self] in
                 guard let self = self else { return }
                 for fileURL in fileURLs {
-                    let blobName = fileURL.lastPathComponent
                     do {
+                        let baseFolderURL = try self.getDetectionsFolder()
+                        guard let blobName = self.relativePath(to: fileURL, from: baseFolderURL) else {
+                            self.managerLogger.critical("Failed to generate relative path to \(fileURL.path) from \(baseFolderURL.path).")
+                            return
+                        }
+                        
                         let fileData = try Data(contentsOf: fileURL)
                         managerLogger.info("Attempting to upload stored file: \(blobName)")
                         try await uploader.uploadData(fileData, blobName: blobName)
@@ -674,11 +833,22 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
                         try FileManager.default.removeItem(at: fileURL)
                         managerLogger.info("Deleted local file \(blobName)")
                         
+                        let filename = blobName as NSString
+                        let filetype = filename.pathExtension
+                                               
                         DispatchQueue.main.async {
-                            self.imagesDelivered += 1
+                            switch (filetype.lowercased()) {
+                            case "jpg":
+                                self.imagesDelivered += 1
+                            case "json":
+                                self.metadataDelivered += 1
+                            default:
+                                self.managerLogger.warning("Unexpected filetype: \(filetype)")
+                            }
+                            self.filesPending -= 1
                         }
                     } catch {
-                        self.managerLogger.critical("Failed to process and clear stored file \(blobName). It will be retried later.")
+                        self.managerLogger.critical("Failed to process and clear stored file \(fileURL.path). It will be retried later.")
                     }
                 }
                 managerLogger.info("Finished processing stored files.")
@@ -686,6 +856,38 @@ class DetectionManager: NSObject, ObservableObject, VideoCaptureDelegate {
         } catch {
             managerLogger.critical("Unexpected error retrieving contents of Detections folder: \(error)")
         }
+    }
+
+    func relativePath(to path: URL, from base: URL) -> String? {
+        // From https://stackoverflow.com/a/56054033
+        
+        // Ensure that both URLs represent files:
+        guard path.isFileURL && base.isFileURL else {
+            return nil
+        }
+
+        //this is the new part, clearly, need to use workBase in lower part
+        var workBase = base
+        if workBase.pathExtension != "" {
+            workBase = workBase.deletingLastPathComponent()
+        }
+
+        // Remove/replace "." and "..", make paths absolute:
+        let destComponents = path.standardized.resolvingSymlinksInPath().pathComponents
+        let baseComponents = workBase.standardized.resolvingSymlinksInPath().pathComponents
+
+        // Find number of common path components:
+        var i = 0
+        while i < destComponents.count &&
+              i < baseComponents.count &&
+              destComponents[i] == baseComponents[i] {
+                i += 1
+        }
+
+        // Build relative path:
+        var relComponents = Array(repeating: "..", count: baseComponents.count - i)
+        relComponents.append(contentsOf: destComponents[i...])
+        return relComponents.joined(separator: "/")
     }
     
     /// Covers sensitive areas in an image with black boxes.
